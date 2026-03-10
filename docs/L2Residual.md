@@ -8,7 +8,7 @@ This page keeps only the essential L2 chain: which histograms are filled, which 
 | --- | --- | --- | --- |
 | Histogram filling | [analyse.cc](../fillhistograms/analyse.cc#L314-807) | event trees, jets, alpha thresholds, dijet selection | `dijetasymmetry3D*`, `dijetasymmetry2D_a*`, `asymmdist3D_a*`, `absasymmdist3D_a*` |
 | Derivation | [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L1-259) | `dijetasymmetry3D*` from MC and data | `mc_pt*_alpha*`, `dt_pt*_alpha*`, `ratio_pt*_alpha*`, `Respvsa_*`, `Respvsa_norm_*` |
-| Alpha fits | [dofits.C](../L2Residual/dofits.C#L33-301) | `Respvsa_norm_*`, `ratio_pt*_alpha*` | `ratio`, `corrections_<ptrange>` |
+| Alpha fits | [dofits.C](../L2Residual/dofits.C#L33-301) | `Respvsa_norm_*`, `ratio_pt*_alpha0.3` | `ratio`, `corrections_<ptrange>` |
 | pT fits | [fit_pt_param.C](../L2Residual/fit_pt_param.C#L28-169) | `corrections_<ptrange>` | `loglin_etaN`, `const_etaN`, `run3_etaN` |
 | Text export | [doTxt.C](../L2Residual/doTxt.C#L31-101), [L2res_param_txt.C](../L2Residual/L2res_param_txt.C#L1-97), [L2res_Run3param_txt.C](../L2Residual/L2res_Run3param_txt.C#L1-47) | `corrections_<ptrange>` or fitted functions plus k-factors | JetMET-format L2 residual text files |
 
@@ -18,10 +18,10 @@ This page keeps only the essential L2 chain: which histograms are filled, which 
 
 | Histogram family | Meaning | Used by |
 | --- | --- | --- |
-| `dijetasymmetry3D`, `dijetasymmetry3Dabseta`, `dijetasymmetry3Dnarrow`, `dijetasymmetry3Dabsetawide` | main asymmetry profiles vs pT, eta, alpha | [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L1-259) |
-| `dijetasymmetry2D_a01` ... `dijetasymmetry2D_a05` | quick QA profiles at fixed cumulative alpha cuts | plotting and validation |
-| `asymmdist3D_a10` ... `a45` | asymmetry distributions for JER Gaussian-width workflow | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) |
-| `absasymmdist3D_a10` ... `a45` | absolute asymmetry distributions for JER RMS workflow | [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) |
+| [`dijetasymmetry3D*`](../fillhistograms/analyse.cc#L617) | main asymmetry profiles vs pT, eta, alpha | [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L1-259) |
+| [`dijetasymmetry2D_a01` ... `a05`](../fillhistograms/analyse.cc#L624) | quick QA profiles at fixed cumulative alpha cuts | plotting and validation |
+| [`asymmdist3D_a10` ... `a45`](../fillhistograms/analyse.cc#L613) | asymmetry distributions for JER Gaussian-width workflow | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) |
+| [`absasymmdist3D_a10` ... `a45`](../fillhistograms/analyse.cc#L614) | absolute asymmetry distributions for JER RMS workflow | [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) |
 
 Selection block references:
 
@@ -60,29 +60,44 @@ Outputs to keep in mind:
 | `Respvsa_<ptbin>_<etabin>` | raw response ratio vs alpha |
 | `Respvsa_norm_<ptbin>_<etabin>` | response ratio normalized to the reference alpha bin |
 
-References: [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L95-183), [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L188-259)
+References: [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L183), [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L259)
 
-### 3. Alpha fits in `dofits.C`
+### 3. Fit order and the actual objects passed downstream
+
+The implemented order is:
+
+| Order | Object | Produced in | Consumed in |
+| --- | --- | --- | --- |
+| 1 | `ratio_pt<lo>to<hi>_alpha0.3` | [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L183) | normalization reference inside [dofits.C](../L2Residual/dofits.C#L49) |
+| 2 | `Respvsa_norm_<ptbin>_<etabin>` | [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L259) | alpha fit inside [dofits.C](../L2Residual/dofits.C#L107) |
+| 3 | `ratio` histogram of alpha-fit intercepts vs eta | [dofits.C](../L2Residual/dofits.C#L196) | multiplied into the reference ratio histograms in [dofits.C](../L2Residual/dofits.C#L280) |
+| 4 | `corrections_<ptrange>` | [dofits.C](../L2Residual/dofits.C#L293) | pT fit input in [fit_pt_param.C](../L2Residual/fit_pt_param.C#L131) |
+
+The important clarification is that the pT fits do not use the alpha-fit functions directly. They use the already alpha-corrected eta-bin values stored in `corrections_<ptrange>`.
+
+### 4. Alpha fits in `dofits.C`
 
 This stage uses the normalized response-vs-alpha histograms and extracts the eta-dependent correction factor.
 
 | Fit | Expression | Purpose |
 | --- | --- | --- |
-| alpha fit | `pol1` | extrapolate response behavior vs alpha |
-| eta smoothing | `[0]+[1]*cosh(x)/(1+[2]*cosh(x))` | smooth correction vs eta |
+| alpha fit | `pol1` | fit `Respvsa_norm_*` vs alpha and store the intercept in `ratio` |
+| eta helper | `[0]+[1]*cosh(x)/(1+[2]*cosh(x))` | defined in the macro but not currently applied to `ratio` |
 
 Outputs to keep:
 
 | Output | Meaning |
 | --- | --- |
 | `ratio` | final eta-dependent k-factor histogram |
-| `corrections_<ptrange>` | eta correction histogram per pT slice |
+| `corrections_<ptrange>` | `ratio_pt*_alpha0.3` multiplied by `ratio`, one eta histogram per pT slice |
 
-Reference: [dofits.C](../L2Residual/dofits.C#L191-224)
+Reference: [dofits.C](../L2Residual/dofits.C#L196), [dofits.C](../L2Residual/dofits.C#L280), [dofits.C](../L2Residual/dofits.C#L293)
 
-### 4. pT fits in `fit_pt_param.C`
+### 5. pT fits in `fit_pt_param.C`
 
 `fit_pt_param.C` fits `corrections_<ptrange>` as a function of pT separately in each eta bin.
+
+The pT-fit input histogram is assembled by taking the same eta bin across all `corrections_<ptrange>` histograms and filling a new histogram vs pT: [fit_pt_param.C](../L2Residual/fit_pt_param.C#L131)
 
 | Function name in output ROOT | Expression |
 | --- | --- |
@@ -152,6 +167,6 @@ The last parameter is the eta-dependent k-factor from `ratio` when `kfsr` is ena
 | Product | Produced by |
 | --- | --- |
 | derived ROOT file | [deriveL2_from3D.C](../L2Residual/deriveL2_from3D.C#L1-259) |
-| eta-fit ROOT file | [dofits.C](../L2Residual/dofits.C#L33-301) |
+| alpha-fit and eta-correction ROOT file | [dofits.C](../L2Residual/dofits.C#L33-301) |
 | pT-fit ROOT file | [fit_pt_param.C](../L2Residual/fit_pt_param.C#L28-169) |
 | L2 residual text file | one of the three text exporters above |

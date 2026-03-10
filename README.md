@@ -14,7 +14,7 @@ cd CMSSW_15_1_0_patch3/src
 cmsenv
 ```
 
-Create a Fork of this repository for your own use and development or directly use this repository.
+Create a fork of this repository for your own use and development or directly use this repository.
 
 ```bash
 git clone -b L3ResPhotonJet https://gitlab.cern.ch/bharikri/residualanalysis.git
@@ -32,6 +32,7 @@ cd fillhistograms
 root -l -b -q compile.C
 cd ..
 ```
+
 
 ## Quick workflows
 
@@ -84,6 +85,26 @@ root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root",60,
 - `docs/Systematics.md`: L2 systematic-uncertainty production and text-file exports.
 - `docs/Batch.md`: batch inputs, submission helpers, and merge flow.
 - `docs/residualanalysis.wiki/residualanalysis.md`: GitLab wiki landing page linking the same material.
+
+## Wiki Sync
+
+The GitLab wiki is a separate git repository. Clone it wherever you want, then point the sync script at that checkout.
+
+Example setup:
+
+```bash
+git clone <your-project-url>.wiki.git /path/to/residualanalysis.wiki
+python3 docs/sync_wiki.py \
+	--wiki-dir /path/to/residualanalysis.wiki \
+	--project-url <your-project-url>
+cd /path/to/residualanalysis.wiki
+git status
+git add .
+git commit -m "Sync wiki from docs"
+git push
+```
+
+If the wiki checkout lives in `docs/residualanalysis.wiki`, `python3 docs/sync_wiki.py` is enough.
 
 ## Batch processing
 

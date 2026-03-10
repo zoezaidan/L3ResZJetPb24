@@ -17,10 +17,10 @@ This page keeps the essential L3 chain: which photon+jet histograms matter, whic
 
 | Histogram family | Meaning | Used by |
 | --- | --- | --- |
-| `photonjet_balance3D`, `photonjet_balance3Dwide`, `photonjet_balance3Dnarrow` | balance profile vs photon pT, eta, alpha | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C#L250-470) |
-| `photonjet_balance3Dabseta`, `photonjet_balance3Dabsetawide`, `photonjet_balance3Dabsetanarrow` | same payload in absolute eta | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C#L250-470) |
-| matching `_counts` histograms | event counts for QA and uncertainty handling | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C#L626-633) |
-| `photonjet_balance_dist` | balance distribution vs photon pT and alpha | distribution overlays and checks |
+| [`photonjet_balance3D*`](../fillhistograms/analyse_PhotonJet.cc#L863) | balance profile vs photon pT, eta, alpha | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C#L250-470) |
+| [`photonjet_balance3Dabseta*`](../fillhistograms/analyse_PhotonJet.cc#L866) | same payload in absolute eta | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C#L250-470) |
+| [`photonjet_balance3D*_counts`](../fillhistograms/analyse_PhotonJet.cc#L874) | event counts for QA and uncertainty handling | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C#L626-633) |
+| [`photonjet_balance_dist`](../fillhistograms/analyse_PhotonJet.cc#L880) | balance distribution vs photon pT and alpha | distribution overlays and checks |
 
 Selection references:
 

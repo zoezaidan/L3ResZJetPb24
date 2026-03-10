@@ -13,11 +13,11 @@ This page keeps the essential JER chain: which histograms matter, which macro co
 
 | Histogram family | Meaning | Used by |
 | --- | --- | --- |
-| `responses3D` | reco/gen jet response distribution vs pT and eta | [MCJER.C](../JER/MCJER.C#L5-154), [MCRESP.C](../JER/MCRESP.C#L1-85) |
-| `etaresponse` | `eta_reco - eta_gen` distribution | [MCJPR.C](../JER/MCJPR.C#L8-150) |
-| `phiresponse` | `phi_reco - phi_gen` distribution | [MCJPR.C](../JER/MCJPR.C#L8-150) |
-| `asymmdist3D_a10` ... `a45` | asymmetry distributions per alpha cut | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) |
-| `absasymmdist3D_a10` ... `a45` | absolute asymmetry distributions per alpha cut | [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) |
+| [`responses3D`](../fillhistograms/analyse.cc#L802) | reco/gen jet response distribution vs pT and eta | [MCJER.C](../JER/MCJER.C#L5-154), [MCRESP.C](../JER/MCRESP.C#L1-85) |
+| [`etaresponse`](../fillhistograms/analyse.cc#L804) | `eta_reco - eta_gen` distribution | [MCJPR.C](../JER/MCJPR.C#L8-150) |
+| [`phiresponse`](../fillhistograms/analyse.cc#L803) | `phi_reco - phi_gen` distribution | [MCJPR.C](../JER/MCJPR.C#L8-150) |
+| [`asymmdist3D_a10` ... `a45`](../fillhistograms/analyse.cc#L613) | asymmetry distributions per alpha cut | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) |
+| [`absasymmdist3D_a10` ... `a45`](../fillhistograms/analyse.cc#L614) | absolute asymmetry distributions per alpha cut | [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) |
 
 ## Minimal chain detail
 
