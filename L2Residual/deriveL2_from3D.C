@@ -1,24 +1,17 @@
 // Derive responses from dijet asymmetries using the 3D profile
 
-//#include settings.h
 #include "../fillhistograms/histograms.h"
 
- 
-//void deriveL2_from3D(string inFileName = "HIJEC_results/rebin/pbpbreco_MC_wideeta_lxplus.root",string inFileNameDT = "HIJEC_results/rebin/pbpbreco_DATA_wideeta_lxplus.root", string outfilename = "L2residuals_pbpbreco_from3Dlxplus_alpha03_rebin_abs_wideeta.root", bool dodt = true,   int alphabin = 3, bool useabs = false, bool usewideabs = true) {
-//void deriveL2_from3D(string inFileName = "HIJEC_results/rebin/pbpbreco_MC_wideeta_lxplus.root",string inFileNameDT = "HIJEC_results/closure/pbpbreco_DATA_ptcut.root", string outfilename = "L2residuals_pbpbreco_from3Dlxplus_alpha03_rebin_abs_closure_ptcut.root", bool dodt = true,   int alphabin = 3, bool useabs = true, bool usewideabs = false) {
- // void deriveL2_from3D(string inFileName = "HIJEC_results/debugged_plus_JER/pbpbreco_MC.root",string inFileNameDT = "HIJEC_results/debugged_plus_JER/pbpbreco_DATA_closureandJER.root", string outfilename = "L2residuals_pbpbreco_from3Dlxplus_alpha03_closure_ptlims.root", bool dodt = true,   int alphabin = 3, bool useabs = true, bool usewideabs = false) {
+// Inputs root files are
+// - file with MC
+// - file with DT (run for all separate data files you have)
 
-//void deriveL2_from3D(string inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.root",string inFileNameDT = "HIJEC_results/rerunall/HP_AK4_PFTRIG_jetid.root", string outfilename = "RERUNALL/L2residuals_pbpbreco_rerunall_HP_PFTRIG_jetid_a3.root", bool dodt = true,   int alphabin = 5, bool useabs = true, bool usewideabs = false) {
-
-// void deriveL2_from3D(string inFileName = "HIJEC_results/rerunall/MC_AK4_nojetid.root",string inFileNameDT = "HIJEC_results/rerunall/HP_AK4_PFTRIG_nojetid.root", string outfilename = "RERUNALL/L2residuals_pbpbreco_rerunall_HP_PFTRIG_nojetid_a3.root", bool dodt = true,   int alphabin = 5, bool useabs = true, bool usewideabs = false) {
-
-   
-void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.root",TString inFileNameDT = "HIJEC_results/rerunall/zerobiasall_jetid.root", TString outfilename = "RERUNALL/L2residuals_pbpbreco_rerunall_zerobias_jetid.root", bool dodt = true,   int alphabin = 5, bool useabs = true, bool usewideabs = false) {
+void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.root",TString inFileNameDT = "HIJEC_results/rerunall/zerobiasall_jetid.root", TString outfilename = "RERUNALL/L2residuals_pbpbreco_rerunall_zerobias_jetid.root", int alphabin = 5, bool useabs = true, bool usewideabs = false) {
 
 
   // Open file
-  TFile *inFile = new TFile(inFileName, "READ"); // TODO: safety checks about opening file successfully
-  TFile *inFileDT = new TFile(inFileNameDT, "READ"); // TODO: safety checks about opening file successfully
+  TFile *inFile = new TFile(inFileName, "READ"); 
+  TFile *inFileDT = new TFile(inFileNameDT, "READ");
 
   //// These are bins to be processed
   vector<string> etabins = {"eta_-5.2_5.2"};
@@ -102,18 +95,17 @@ void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.r
 ///////////////// Responses against eta in bin of alpha cut, pt
 
   for (int ptbin = 1; ptbin <= asymm3d[etabins[i].c_str()]->GetXaxis()->GetNbins(); ++ptbin) {
-    //    for (int ptbin = 1; ptbin < 5; ++ptbin) {
 
     cout << "Getting corrections as function of eta" << endl;
     cout << "pT bin edges: " << asymm3d[etabins[i].c_str()]->GetXaxis()->GetBinLowEdge(ptbin) << " " << asymm3d[etabins[i].c_str()]->GetXaxis()->GetBinLowEdge(ptbin+1) << endl;
     string ptstr = Form("%.0fto%.0f",asymm3d[etabins[i].c_str()]->GetXaxis()->GetBinLowEdge(ptbin),asymm3d[etabins[i].c_str()]->GetXaxis()->GetBinLowEdge(ptbin+1));
     cout << ptstr.c_str() << endl;
-  //  data3d[etabins[i].c_str()]->Draw("same");
+    //  data3d[etabins[i].c_str()]->Draw("same");
 
-  cout << "alpha bin: " << alphabin << endl;
-  cout << " alpha bin edges: " << asymm3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphabin) << " " << asymm3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphabin+1) << endl;
-  string alphastr = Form("alpha%.1f",asymm3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphabin+1));
-
+    cout << "alpha bin: " << alphabin << endl;
+    cout << " alpha bin edges: " << asymm3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphabin) << " " << asymm3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphabin+1) << endl;
+    string alphastr = Form("alpha%.1f",asymm3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphabin+1));
+    
   // This is for MC
   for (int etabin = 1; etabin <= asymm3d[etabins[i].c_str()]->GetYaxis()->GetNbins(); ++etabin) {
       
@@ -166,7 +158,7 @@ void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.r
       //aerrordt->SetBinContent(etabin,err);
     }
 
-  // First part of the correction is the ratio of these
+    // First part of the correction comes from the ratio of these
     
     TH1D* resp_eta_data = (TH1D*)vseta_nom_data->Clone("resp_eta_data");
     resp_eta_data->Divide(vseta_denom_data);
@@ -185,7 +177,6 @@ void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.r
     respETA[ptbin] = (TH1D*)resp_eta->Clone("ratio"); 
     respETA[ptbin]->Divide(resp_eta_data);
 
-    // TODO: do this in a smart way
     responses[Form("mc_pt%s_%s",ptstr.c_str(),alphastr.c_str())]->Write(Form("mc_pt%s_%s",ptstr.c_str(),alphastr.c_str()));
     responses[Form("dt_pt%s_%s",ptstr.c_str(),alphastr.c_str())]->Write(Form("dt_pt%s_%s",ptstr.c_str(),alphastr.c_str()));
     //   responses[Form("ratio_pt%s_%s",ptstr.c_str(),alphastr.c_str())]->Write(Form("ratio_pt%s_%s",ptstr.c_str(),alphastr.c_str()));   // This is the reference for the fit
@@ -193,7 +184,7 @@ void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.r
  
   }
 
-  /// HERE THE ISR/FSR CORRECTIONS; need to get the responses in bins of pt, eta
+  // INPUTS FOR THE ISR/FSR CORRECTIONS; need to get the responses in bins of pt, eta
   cout << "number of alpha bins: " << asymm3d[etabins[i].c_str()]->GetZaxis()->GetNbins() << endl;
 
    
@@ -245,23 +236,23 @@ void deriveL2_from3D(TString inFileName = "HIJEC_results/rerunall/MC_AK4_jetid.r
        float error = aerrordt->GetBinContent(bin);
        vsalpha_nom_data->SetBinError(bin, error);
      }
-  
+     
      vsalpha_nom_data->Write(Form("Respvsa_denom_data_%d_%d",ptbin,etabin));
-
+     
      vsalpha_nom->Divide(vsalpha_nom_data); // This is the MC/Data responses in bin of alpha
      vsalpha_nom->Write(Form("Respvsa_%d_%d",ptbin,etabin));
-
+     
      TH1D* vsalpha_norm = (TH1D*)vsalpha_nom->Clone(Form("vsalpha_norm_%d_%d",ptbin,etabin));
      for (int bin = 1; bin <= vsalpha_nom->GetXaxis()->GetNbins(); ++bin) {
        
          double val =  vsalpha_nom->GetBinContent(bin);
       	 double err = vsalpha_nom->GetBinError(bin);
-
+	 
 	 double norm =  respETA[ptbin]->GetBinContent(etabin);
 	 double normerr =  respETA[ptbin]->GetBinError(etabin);
-
+	 
 	 vsalpha_norm->SetBinContent(bin,val/norm);
-	 vsalpha_norm->SetBinError(bin,err/norm); // TODO: check this is correct
+	 vsalpha_norm->SetBinError(bin,err/norm); //
 
 	 cout << "in alphabin " << bin << " norm with  " << norm << " lowedge " <<   vsalpha_norm->GetBinLowEdge(bin) << endl;
      }

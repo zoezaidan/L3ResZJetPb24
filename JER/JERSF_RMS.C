@@ -30,7 +30,7 @@ void JERSF_RMS(TString outFileName = "JERSF_sigmas_RMS.root", string inFileName 
   TFile *inFileDT = new TFile(inFileNameDT.c_str(), "READ");
   TFile *inFileZB = new TFile(inFileNameZB.c_str(), "READ"); 
 
-  // Get 3D monsters: TODO: EDIT: maybe map to different alphas
+  // Get 3D monsters: 
   TH3D* asymmMC = (TH3D*)inFile->Get("hibin_-1.0_0.0/eta_-5.2_5.2/asymmdist3D");
   TH3D* asymmDT = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/asymmdist3D");
   TH3D* asymmZB = (TH3D*)inFileZB->Get("hibin_-1.0_0.0/eta_-5.2_5.2/asymmdist3D");

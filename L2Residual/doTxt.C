@@ -1,24 +1,35 @@
 // Create .txt file with the L2res corrections
 
-void doTxt(int nparams = 5) {
+int nparams = 5;
 
+void doTxt(TString inFileName = "../RERECORESULTS/kfactor_rerunall_combined_allpts.root", TString outFileName = "L2residual.txt" ) {
+
+  // int pts[] = {40, 55, 80, 120, 170, 1000}; // Binning in files
   int pts[] = {15, 25, 80, 120, 1000}; // Binning in files
-
-  TFile *inFile = new TFile("../RERECORESULTS/kfactor_rerunall_combined_allpts.root", "READ");
-    
-  string header = "{2 JetEta JetPt 1 JetPt ([0]+[1]*log(x))*[2] Correction L2Relative}";
-  string filename = "L2residual_2023PbPb_RERECO_APR2025.txt";
+ 
+  // TFile *inFile = new TFile("../fits_combinedbins/kfactor_rerunall_combined_allpts.root", "READ");
+   TFile *inFile = new TFile(inFileName, "READ");
+  // TFile *inFile2 = new TFile("", "READ");
   
+  string header = "{2 JetEta JetPt 1 JetPt ([0]+[1]*log(x))*[2] Correction L2Relative}";
+   
   ofstream txtfile;
-  txtfile.open(filename.c_str());
+  txtfile.open(outFileName);
 
-  std::cout << "Producing txt file " << filename.c_str() << " with header " << header.c_str() << std::endl;
+  std::cout << "Producing txt file " << outFileName << " with header " << header.c_str() << std::endl;
   txtfile << header.c_str() << std::endl;
 
   map<int, TH1D*> facts;
    for (int ptbin = 2; ptbin <= 4; ++ptbin) {
-       facts[ptbin] = (TH1D*)inFile->Get(Form("corrections_%dto%d",pts[ptbin-1],pts[ptbin]));
+     //       facts[ptbin] = (TH1D*)inFile->Get(Form("corrs_%dto%d",pts[ptbin-1],pts[ptbin]));
+     facts[ptbin] = (TH1D*)inFile->Get(Form("corrections_%dto%d",pts[ptbin-1],pts[ptbin]));
      }
+
+  // Alternatively: take the last bin of pt from a different file
+  /*   for (int ptbin = 2; ptbin < 4; ++ptbin) {
+    facts[ptbin] = (TH1D*)inFile->Get(Form("corrs_%dto%d",pts[ptbin-1],pts[ptbin]));
+  }
+  facts[4] = (TH1D*)inFile2->Get(Form("corrs_%dto%d",pts[4],pts[5])); */
 
   for (int etabin = facts[3]->GetXaxis()->GetNbins(); etabin >= 1; --etabin) {
         for (int ptbin = 2; ptbin <= 4; ++ptbin) {

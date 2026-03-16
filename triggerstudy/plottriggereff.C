@@ -1,36 +1,20 @@
 // Plot trigger efficiencies as function of leading jet pT, or pT average
-// Method is the reference triggers
+// Method is the reference triggers, using the ZB data (2023 pp reference with PbPb settings)
 
-
-// Do we want to use ZB as reference for all?
-// Maybe do option to choose
-
-
-int nevtstotalinzb = 1;
-int nevtsinusedzb = 1;
-
-
-void plottriggereff() {
-
-  // string ZBfilename = "HIJEC_results/rerunall/zerobiasall_nojetid.root";
-  string ZBfilename = "/home/laura/Code/jec/HIJEC_rereco_results/RERECO_ZB_ALL_PFTRIG_jetid.root";
-  //  string HPfilename = "HIJEC_results/debugged_plus_JER/trigstudy_hardprobes_pf.root";
+void plottriggereff(string ZBfilename = "/home/laura/Code/jec/HIJEC_rereco_results/RERECO_ZB_ALL_PFTRIG_jetid.root") {
 
   auto ZBfile = new TFile(ZBfilename.c_str(),"READ");
-  //  auto HPfile = new TFile(HPfilename.c_str(),"READ");
 
+  // Jet trigger thresholds
   int pthrs[] = {40, 60};
   int nthrs = 2;
   int cols[] = {1, 2};
   
   map<int,TH1D*> leading, ptavg;
 
+  // Reference histos passing ZB
   leading[0] = (TH1D*)ZBfile->Get("hibin_-1.0_0.0/eta_-5.2_5.2/HLTZB");
   ptavg[0] = (TH1D*)ZBfile->Get("hibin_-1.0_0.0/eta_-5.2_5.2/HLTZB_ptav");
-
-  // Sample limited
-  //leading[0]->Scale(4);
-  // ptavg[0]->Scale(4);
 
   TCanvas *c1 = new TCanvas("c1","c1",800,600);
   TCanvas *c2 = new TCanvas("c2","c2",800,600);
@@ -44,12 +28,12 @@ void plottriggereff() {
   for (int i = 1; i < nthrs; ++i) {
 
     cout << pthrs[i] << endl;
-  // TODO: use correct file
+
     leading[pthrs[i]] = (TH1D*)ZBfile->Get(Form("hibin_-1.0_0.0/eta_-5.2_5.2/HLT%d",pthrs[i]));
     ptavg[pthrs[i]] = (TH1D*)ZBfile->Get(Form("hibin_-1.0_0.0/eta_-5.2_5.2/HLT%d_ptav",pthrs[i]));
 
-    leading[pthrs[i]]->Divide(leading[pthrs[i]],leading[0],1,1,"b"); // option to change reference?
-    ptavg[pthrs[i]]->Divide(ptavg[pthrs[i]],ptavg[0],1,1,"b"); // option to change reference?
+    leading[pthrs[i]]->Divide(leading[pthrs[i]],leading[0],1,1,"b");
+    ptavg[pthrs[i]]->Divide(ptavg[pthrs[i]],ptavg[0],1,1,"b");
 
     leading[pthrs[i]]->SetLineColor(cols[i]);
     ptavg[pthrs[i]]->SetLineColor(cols[i]);
@@ -79,21 +63,10 @@ void plottriggereff() {
     l2->Draw("same");
   }
 
-   c1->SetLogx();
+  c1->SetLogx();
   c1->Print(Form("triggerturnon_leading_pf_jetid.png"));
-
+  
   c2->SetLogx();
   c2->Print(Form("triggerturnon_ptavg_pf_jetid.png"));
-  
-  // Get histos for leadingjet
-  // Get histos for pT,avg
-
-  // Ratios
-
-
-  // plot
-
-
-  //Save
 
 }

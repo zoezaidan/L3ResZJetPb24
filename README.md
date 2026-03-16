@@ -1,5 +1,8 @@
-Repository to run analysis for producind L2 residual jet energy corrections and jet energy resolution scale factor. The inputs for these macros are HiForest ntuples (at the moment for 2023 ppref).
-At the moment direct balance method with tag-and-probing a dijet system is used.
+Repository to run analysis for producind L2 residual jet energy corrections and jet energy resolution scale factors. The inputs for these macros are HiForest ntuples (at the moment for 2023 ppref).
+At the moment only direct balance method with tag-and-probing a dijet system is used.
+
+
+
 
 
 1. To fill histograms for L2residuals:
@@ -16,7 +19,7 @@ Then, to run the analysis:
 1. analyse.cc fills histograms you need.
 Flags: <TODO>
 
-At the moment this is run with hadded ntuples per data set (MC, HP0, HP1, HP2, ZB0, etc.) - choice motivated by small amount of data in 2023ppref.
+At the moment this is run with hadded ntuples per data set (MC, HP0, HP1, HP2, ZB0, etc.) - choice motivated by the small amount of data in 2023ppref.
 
 You can do a test run with simply doing 'root -l analyse.cc'
 

@@ -9,19 +9,16 @@ void plotresponses( string input = "L2residuals_pbpbreco_rereco_zb_jetid.root", 
 
   float etalimit[] = {3.0, 3.0, 2.964-0.08, 2.5, 1.93+0.12};// for shady box, do manually before figuring out something smart
   bool drawbox = false;
-  // Limit eta-range
   
   gStyle->SetOptStat(0);
-
  
   TFile *file = new TFile(input.c_str(),"READ");
 
   float alpha = 0.3;
-  // int pts[] = {15, 25, 55, 80, 120, 170, 1000}; // Temporary
-  int pts[] = {15, 25, 80, 120, 1000}; // Temporary
+  int pts[] = {15, 30, 40, 80, 92, 120, 1000};
+  //int pts[] = {15, 30, 80, 120, 1000};
 
-  // for (int i = 0; i < 6; ++i) {
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 6; ++i) {
     int pt1 = pts[i];
     int pt2= pts[i+1];
     string namelabel = Form("pbpb_%dto%dalpha%.1f_%s",pt1,pt2,alpha,plottag.c_str());
@@ -60,7 +57,9 @@ void plotresponses( string input = "L2residuals_pbpbreco_rereco_zb_jetid.root", 
   
     leg->Draw("same");
 
-    // How do we find coordinate for shade?
+    auto line = new TLine();
+    line->DrawLine(0,1.02,2.5,1.02);
+
     auto box = new TBox((etalimit[i]/5.19), 0.09, 0.9, 0.93);
     box->SetLineColor(kRed);
     box->SetFillColorAlpha(kBlack, 0.2);

@@ -5,11 +5,8 @@
 
 void JERSF_fits(string outfilename = "JERSF_sigmas_fits_forjer_wideeta.root", string inFileName = "HIJEC_results/rerunall_combinedbins/MC_AK4_PFTRIG_jetid_l2corr_forjer_wideeta.root", string inFileNameZB = "HIJEC_results/rerunall_combinedbins/zerobiasall_jetid_l2corr_forjer_wideeta.root", string inFileNameDT = "HIJEC_results/rerunall_combinedbins/HP_AK4_PFTRIG_jetid_l2corr_forjer_wideeta.root") {
 
-  //  int pts[] = {40, 55, 80, 120, 170, 1000}; // Temporary
-  int pts[] = {15, 25, 80, 120, 1000}; // Temporary
-
-  //  float etabins[] = {0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0}; // Temporary
-  float etabins[] = {0, 1.3, 2.5, 3.0}; // Temporary
+  int pts[] = {15, 25, 80, 120, 1000}; // For 2023PbPb
+  float etabins[] = {0, 1.3, 2.5, 3.0}; // For 2023PbPb
   
   TFile *inFile = new TFile(inFileName.c_str(), "READ");
   TFile *inFileDT = new TFile(inFileNameDT.c_str(), "READ");

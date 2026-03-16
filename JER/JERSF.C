@@ -104,15 +104,6 @@ void JERSF(string inFileName = "HIJEC_results/debugged_plus_JER/pbpbreco_MC_JER.
   }
   
   
-  // Plot histogram
-
-
-
-  // Try fitting gaussian -> Nick tried double gaussian, how about crystal ball? -> could implement anyway
-
-
-
-
 
   // SAVE
 }
