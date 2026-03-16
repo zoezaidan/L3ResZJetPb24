@@ -75,6 +75,11 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
   // dijetbalance_a02 = new TH1D("dijetbalance_a02","  ; ;", 20, -2, 2);
   dijetasymmetry_a02 = new TProfile("dijetasymmetry_a02","  ; ;",  nptforjec, &ptforjec[0]);
   dijetbalance_a03 = new TH1D("dijetbalance_a03","  ; ;", 20, -2, 2);
+
+
+  dijetbalance_a03_pt30to40 = new TH2D("dijetbal_pt30to40", "", nwabsetas, wabsetarange, nasym, asymrange);
+  dijetbalance_a03_pt40to80 = new TH2D("dijetbal_pt40to80", "", nwabsetas, wabsetarange, nasym, asymrange);
+
   dijetasymmetry_a03 = new TProfile("dijetasymmetry_a03","  ; ;",  nptforjec, &ptforjec[0]);
   //  dijetbalance_a035 = new TH1D("dijetbalance_a035","  ; ;", 20, -2, 2);
   dijetasymmetry_a035 = new TProfile("dijetasymmetry_a035","  ; ;",  nptforjec, &ptforjec[0]);
