@@ -1,6 +1,8 @@
 Repository to run analysis for producind L2 residual jet energy corrections and jet energy resolution scale factors. The inputs for these macros are HiForest ntuples (at the moment for 2023 ppref).
 At the moment only direct balance method with tag-and-probing a dijet system is used.
 
+Input ntuples for 2023 are available on eos: `/eos/cms/store/group/phys_heavyions/lamartik/DIJET_JEC_FORESTS/`
+
 
 
 
