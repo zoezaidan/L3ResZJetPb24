@@ -35,7 +35,11 @@ When you have the output from the former
 
 4. plotresponses.C can be used to plot the responses
 
-5. Produce txt files:
+5. fit_pt_param.C fits the response ratios vs. pT in bins of |eta|. 
+
+6. Produce txt files:
+- L2res_Run3param_txt.C can be used to produce .txt files with pT-parametrization
+- doTxt.C can be used to produce .txt files for L2res binned in jet pT,eta (bin edges are taken from the histogram containing the corrections)
 
 
 JET pT/eta/phi RESOLUTION AND JER SF:
