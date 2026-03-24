@@ -1,23 +1,30 @@
 Repository to run analysis for producind L2 residual jet energy corrections and jet energy resolution scale factors. The inputs for these macros are HiForest ntuples (at the moment for 2023 ppref).
 At the moment only direct balance method with tag-and-probing a dijet system is used.
 
+Input ntuples for 2023 are available on eos: `/eos/cms/store/group/phys_heavyions/lamartik/DIJET_JEC_FORESTS/`
 
 
 
 
-1. To fill histograms for L2residuals:
 
-- Code is in directory fillhistogram.
+## To fill histograms for L2residuals:
 
--> call this code separarely for different datasets. you need cmsenv to be able to call functions to apply jec (and jer sf). shouldn't really matter which cmssw you use.
--> in settings.h you can manually set which JEC files to use. The JEC (and JER SF) files are always read from the path set up in here.
+All macros for this step are in directory 'fillhistograms'.
+You need cmsenv to be able to call functions to apply jec (and jer sf). shouldn't really matter which cmssw you use.
+
+In settings.h you can manually set which JEC files to use. The JEC (and JER SF) files are always read from the path set up in here.
 
 First: root -l compile.C 
 
 Then, to run the analysis:
 
 1. analyse.cc fills histograms you need.
-Flags: <TODO>
+There are unfortunately still a couple of booleans you might want to reset/check:
+
+bool applyjetvetomap = true;
+bool isrun3jersf = true; // Run3 JER SF in pp is pT dependent and applied like JEC
+bool usecalotrig = false;
+
 
 At the moment this is run with hadded ntuples per data set (MC, HP0, HP1, HP2, ZB0, etc.) - choice motivated by the small amount of data in 2023ppref.
 
@@ -26,19 +33,25 @@ You can do a test run with simply doing 'root -l analyse.cc'
 To run locally/interactively you can also use run.sh
 
 
-When you have the output from the former
+When you have the output from the former:
+## The next steps are contained in directory 'L2Residual'.
+
 2. run deriveL2_from3D.C
 
 3. Fit the response ratios vs. alpha: dofits.C
 
 4. plotresponses.C can be used to plot the responses
 
-5. Produce txt files:
+5. fit_pt_param.C fits the response ratios vs. pT in bins of |eta|. 
+
+6. Produce txt files:
+- L2res_Run3param_txt.C can be used to produce .txt files with pT-parametrization
+- doTxt.C can be used to produce .txt files for L2res binned in jet pT,eta (bin edges are taken from the histogram containing the corrections)
 
 
-JET pT/eta/phi RESOLUTION AND JER SF:
+## JET pT/eta/phi RESOLUTION AND JER SF:
 
-To fill histograms for JER SF (the tag-and-probe conditions are slightly different): turn on flag "" in analyse.cc
+To fill histograms for JER SF (the tag-and-probe conditions are slightly different): turn on flag "fillforJER" in analyse.cc
 -> you need to apply the L2 residual JEC before deriving the SF, remember check that too
 
 
@@ -50,7 +63,7 @@ When you have the outputs from that, you can run MC-checks:
 - doTxtMCJER.C -> print txt files of resolution fit parameters
 
 
-For SF there are a couple of scripts:
+## For SF there are a couple of scripts:
 
 1. These are alternatives:
 - JERSF_fits.C -> Extracts resoluiton by fitting gaussian to the dijet asymmetry distributions
