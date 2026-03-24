@@ -3,7 +3,7 @@ At the moment only direct balance method with tag-and-probing a dijet system is 
 
 Input ntuples for 2023 are available on eos: `/eos/cms/store/group/phys_heavyions/lamartik/DIJET_JEC_FORESTS/`
 
-
+.txt files in fillhistograms/jecfiles are the files used in the L2Residual derivation for 2023PbPb, and files from the derivation.
 
 
 
