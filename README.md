@@ -1,10 +1,13 @@
-Repository to run analysis for producind L2 residual jet energy corrections and jet energy resolution scale factors. The inputs for these macros are HiForest ntuples (at the moment for 2023 ppref).
+Repository for macros to run analysis for producinng L2 residual jet energy corrections and jet energy resolution scale factors. The inputs for these macros are HiForest ntuples (at the moment for 2023 ppref).
 At the moment only direct balance method with tag-and-probing a dijet system is used.
 
 Input ntuples for 2023 are available on eos: `/eos/cms/store/group/phys_heavyions/lamartik/DIJET_JEC_FORESTS/`
 
 .txt files in fillhistograms/jecfiles are the files used in the L2Residual derivation for 2023PbPb, and files from the derivation.
 
+Unfortunately the analyse.cc has some flags hard coded etc, but all settings and flags should correspond to 2023PbPb jec derivation. The macros have been written from scratch for personal use for mostly a single dataset, hence many things are unfortunately not implemented in a nice modular way, and the scripts used to perform fits, derive corrections and produce txt files will likely contain some hard-coded binnings, phase-space cuts etc.
+
+If you want to use these macros for a different dataset, you will have to change at least the HLT trigger logic and also check the "postprocessing" macros for unpleasant surprises. Also jet pT binning is currently relatively wide.
 
 
 ## To fill histograms for L2residuals:
@@ -21,9 +24,13 @@ Then, to run the analysis:
 1. analyse.cc fills histograms you need.
 There are unfortunately still a couple of booleans you might want to reset/check:
 
+
+```
 bool applyjetvetomap = true;
 bool isrun3jersf = true; // Run3 JER SF in pp is pT dependent and applied like JEC
 bool usecalotrig = false;
+```
+
 
 
 At the moment this is run with hadded ntuples per data set (MC, HP0, HP1, HP2, ZB0, etc.) - choice motivated by the small amount of data in 2023ppref.
