@@ -30,6 +30,10 @@ struct TreeChains {
 };
 
 // Build chains from list of files
+inline bool IsRemoteInputFile(const std::string& path) {
+    return path.rfind("root://", 0) == 0 || path.rfind("xroot://", 0) == 0;
+}
+
 inline TreeChains* BuildChains(const std::vector<std::string>& files,
                                 const std::string& jetTreeName,
                                 bool needPhotonTree = false,
@@ -50,38 +54,45 @@ inline TreeChains* BuildChains(const std::vector<std::string>& files,
     // Add files to all chains
     int nFilesAdded = 0;
     int nFilesSkipped = 0;
+    int nRemoteValidationSkipped = 0;
 
     for (const auto& file : files) {
-        // Quick validation - try to open file
-        TFile* testFile = TFile::Open(file.c_str(), "READ");
-        if (!testFile || testFile->IsZombie()) {
-            std::cerr << "WARNING: Cannot open file, skipping: " << file << std::endl;
-            if (testFile) delete testFile;
-            nFilesSkipped++;
-            continue;
-        }
+        const bool isRemoteFile = IsRemoteInputFile(file);
 
-        // Verify required trees exist
-        if (!testFile->Get("hiEvtAnalyzer/HiTree")) {
-            std::cerr << "WARNING: Missing event tree in: " << file << std::endl;
+        // Quick validation - try to open file
+        if (!isRemoteFile) {
+            TFile* testFile = TFile::Open(file.c_str(), "READ");
+            if (!testFile || testFile->IsZombie()) {
+                std::cerr << "WARNING: Cannot open file, skipping: " << file << std::endl;
+                if (testFile) delete testFile;
+                nFilesSkipped++;
+                continue;
+            }
+
+            // Verify required trees exist
+            if (!testFile->Get("hiEvtAnalyzer/HiTree")) {
+                std::cerr << "WARNING: Missing event tree in: " << file << std::endl;
+                delete testFile;
+                nFilesSkipped++;
+                continue;
+            }
+            if (!testFile->Get(jetTreeName.c_str())) {
+                std::cerr << "WARNING: Missing jet tree (" << jetTreeName
+                          << ") in: " << file << std::endl;
+                delete testFile;
+                nFilesSkipped++;
+                continue;
+            }
+            if (needPhotonTree && !testFile->Get("ggHiNtuplizer/EventTree")) {
+                std::cerr << "WARNING: Missing photon tree in: " << file << std::endl;
+                delete testFile;
+                nFilesSkipped++;
+                continue;
+            }
             delete testFile;
-            nFilesSkipped++;
-            continue;
+        } else {
+            nRemoteValidationSkipped++;
         }
-        if (!testFile->Get(jetTreeName.c_str())) {
-            std::cerr << "WARNING: Missing jet tree (" << jetTreeName
-                      << ") in: " << file << std::endl;
-            delete testFile;
-            nFilesSkipped++;
-            continue;
-        }
-        if (needPhotonTree && !testFile->Get("ggHiNtuplizer/EventTree")) {
-            std::cerr << "WARNING: Missing photon tree in: " << file << std::endl;
-            delete testFile;
-            nFilesSkipped++;
-            continue;
-        }
-        delete testFile;
 
         // Add to chains
         chains->evtChain->Add(file.c_str());
@@ -99,8 +110,22 @@ inline TreeChains* BuildChains(const std::vector<std::string>& files,
         }
     }
 
+    // Simple uniform cache size 100 MB for all chains.
+    const Long64_t cacheSize = 100 * 1024 * 1024;
+    chains->evtChain->SetCacheSize(cacheSize);
+    chains->jetChain->SetCacheSize(cacheSize);
+    chains->triggerChain->SetCacheSize(cacheSize);
+    chains->skimChain->SetCacheSize(cacheSize);
+    if (chains->photonChain) {
+        chains->photonChain->SetCacheSize(cacheSize);
+    }
+
     if (verbose) {
         std::cout << "Files added: " << nFilesAdded << ", skipped: " << nFilesSkipped << std::endl;
+        if (nRemoteValidationSkipped > 0) {
+            std::cout << "Skipped up-front validation for " << nRemoteValidationSkipped
+                      << " remote xrootd files" << std::endl;
+        }
     }
 
     // Get total entries (use event tree as reference)

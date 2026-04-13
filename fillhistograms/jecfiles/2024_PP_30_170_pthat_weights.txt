@@ -1,0 +1,36 @@
+# pT-hat region-dependent weights
+# Config: /eos/user/b/bharikri/lxplus_private/run3_gamma_jet/CMSSW_13_2_13/src/HeavyIonsAnalysis/JetAnalysis/test/1_Skimming/batch/pthat_dag_20260408_124530_2024_PP_QCDPhoton/2024_PP_QCDPhoton.config
+# Computed from pre-built histograms (DAG Stage 2)
+# 
+# Format: For each region [pthat_min, pthat_max), all contributing
+#         samples use the SAME weight to preserve the sample-0 spectrum.
+# 
+# Usage: For event with pthat=P from sample S:
+#   1. Find region R where pthat_bins[R] <= P < pthat_bins[R+1]
+#   2. If S <= R, apply weight from that region
+#   3. If S > R, discard event (shouldn't happen with proper generation)
+# 
+# Region boundaries and weights:
+# Region 0: [30.0000000000, 50.0000000000)
+#   Contributing samples: 0
+#   Weight: 1.0000000000
+# Region 1: [50.0000000000, 80.0000000000)
+#   Contributing samples: 0, 1
+#   Weight: 0.1943628636
+# Region 2: [80.0000000000, 120.0000000000)
+#   Contributing samples: 0, 1, 2
+#   Weight: 0.0445219719
+# Region 3: [120.0000000000, 170.0000000000)
+#   Contributing samples: 0, 1, 2, 3
+#   Weight: 0.0099601337
+# Region 4: [170.0000000000, 9999.0000000000)
+#   Contributing samples: 0, 1, 2, 3, 4
+#   Weight: 0.0020814068
+#
+# Simple format: pthat_threshold weight
+# (weight applies to region starting at this threshold)
+30.0000000000 1.0000000000
+50.0000000000 0.1943628636
+80.0000000000 0.0445219719
+120.0000000000 0.0099601337
+170.0000000000 0.0020814068
