@@ -1,61 +1,165 @@
 # JER
 
-This page keeps the essential JER chain: which histograms matter, which macro consumes them, and how the final MC resolution and scale-factor text files are structured.
+This page documents the truth-resolution and JER scale-factor workflows. The main macros are:
+
+- [JER/MCJER.C](../JER/MCJER.C)
+- [JER/MCJPR.C](../JER/MCJPR.C)
+- [JER/MCRESP.C](../JER/MCRESP.C)
+- [JER/JERSF_RMS.C](../JER/JERSF_RMS.C)
+- [JER/JERSF_fits.C](../JER/JERSF_fits.C)
+- [JER/JERSF_fits_vsalpha.C](../JER/JERSF_fits_vsalpha.C)
+- [JER/JERSF_printtxt.C](../JER/JERSF_printtxt.C)
+- [JER/doTxtMCJER.C](../JER/doTxtMCJER.C)
 
 ## At a glance
 
-| Branch | Macro sequence | Essential inputs | Essential outputs |
+| Branch | Macro sequence | Required inputs | Main outputs |
 | --- | --- | --- | --- |
-| MC truth resolution | [MCJER.C](../JER/MCJER.C#L5-154) or [MCJPR.C](../JER/MCJPR.C#L8-150) -> [doTxtMCJER.C](../JER/doTxtMCJER.C#L12-52) | `responses3D`, `etaresponse`, `phiresponse` | `fit_eta_*` functions and resolution text files |
-| JER scale factors | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) or [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) -> [JERSF_fits_vsalpha.C](../JER/JERSF_fits_vsalpha.C#L5-149) -> [JERSF_printtxt.C](../JER/JERSF_printtxt.C#L1-34) | `asymmdist3D_a*` or `absasymmdist3D_a*` | `SF` histogram and scale-factor text file |
+| MC truth resolution | `MCJER.C` or `MCJPR.C` or `MCRESP.C` then `doTxtMCJER.C` | truth-response histograms from `analyse.cc` | fitted resolution functions and text files |
+| JER scale factors | `JERSF_RMS.C` or `JERSF_fits.C` then `JERSF_fits_vsalpha.C` then `JERSF_printtxt.C` | asymmetry-distribution histograms from `analyse.cc` | `SF` histogram and JER scale-factor text file |
 
-## Essential histograms
+## Runnable Macros
+
+### 1. MC truth resolution macros
+
+Signatures:
+
+```cpp
+void MCJER(TString inFileName,
+           int minpt = 28,
+           string dirname = "MCJER",
+           TString outFileName = "testingMCjer-rereco.root")
+
+void MCJPR(TString inFileName,
+           bool doeta = 0,
+           string dirname = "MCJPR",
+           TString outFileName = "testingMCpfires-rereco.root")
+
+void MCRESP(string inFileName,
+            int minpt = 15,
+            string dirname = "MCJER")
+```
+
+Parameters:
+
+| Macro | Parameters |
+| --- | --- |
+| `MCJER` | input histogram file, minimum pT, output directory, output ROOT file |
+| `MCJPR` | input histogram file, `doeta` switch for eta or phi resolution, output directory, output ROOT file |
+| `MCRESP` | input histogram file, minimum pT, output directory |
+
+Examples:
+
+```bash
+root -l -b -q 'JER/MCJER.C("mc_forjer.root",28,"JER","JER/MCJER.root")'
+root -l -b -q 'JER/MCJPR.C("mc_forjer.root",true,"JER","JER/MCJPR_eta.root")'
+root -l -b -q 'JER/MCRESP.C("mc_forjer.root",15,"JER")'
+```
+
+### 2. JER scale-factor width extraction
+
+Signatures:
+
+```cpp
+void JERSF_RMS(TString outFileName = "JERSF_sigmas_RMS.root",
+               string inFileName = "mc.root",
+               string inFileNameZB = "zb.root",
+               string inFileNameDT = "data.root")
+
+void JERSF_fits(string outfilename = "JERSF_sigmas_fits.root",
+                string inFileName = "mc.root",
+                string inFileNameZB = "zb.root",
+                string inFileNameDT = "data.root")
+```
+
+Parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `outFileName` or `outfilename` | output ROOT file with sigma histograms or graphs |
+| `inFileName` | MC asymmetry histogram ROOT file |
+| `inFileNameZB` | zero-bias asymmetry histogram ROOT file |
+| `inFileNameDT` | data asymmetry histogram ROOT file |
+
+Examples:
+
+```bash
+root -l -b -q 'JER/JERSF_RMS.C("JER/JERSF_sigmas_RMS.root","mc_forjer.root","zb_forjer.root","hp_forjer.root")'
+root -l -b -q 'JER/JERSF_fits.C("JER/JERSF_sigmas_fits.root","mc_forjer.root","zb_forjer.root","hp_forjer.root")'
+```
+
+### 3. Alpha extrapolation and final SF export
+
+Signatures:
+
+```cpp
+void JERSF_fits_vsalpha(string filein = "JERSF_sigmas_fits.root",
+                        string outfilename = "JERSFs_fromfits.root",
+                        bool RMS = false)
+
+void JERSF_printtxt(string filein = "JERSFs_fromRMS.root",
+                    string filename = "JERSF.txt")
+```
+
+Parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `filein` | input ROOT file from the Gaussian or RMS sigma stage |
+| `outfilename` | output ROOT file containing the `SF` histogram |
+| `RMS` | if `true`, interpret the inputs as RMS-based widths |
+| `filename` | output JER scale-factor text file |
+
+Examples:
+
+```bash
+root -l -b -q 'JER/JERSF_fits_vsalpha.C("JER/JERSF_sigmas_fits.root","JER/JERSFs_fromfits.root",false)'
+root -l -b -q 'JER/JERSF_printtxt.C("JER/JERSFs_fromfits.root","JER/JERSF_fromfits.txt")'
+```
+
+## Essential Histograms
 
 | Histogram family | Meaning | Used by |
 | --- | --- | --- |
-| [`responses3D`](../fillhistograms/analyse.cc#L802) | reco/gen jet response distribution vs pT and eta | [MCJER.C](../JER/MCJER.C#L5-154), [MCRESP.C](../JER/MCRESP.C#L1-85) |
-| [`etaresponse`](../fillhistograms/analyse.cc#L804) | `eta_reco - eta_gen` distribution | [MCJPR.C](../JER/MCJPR.C#L8-150) |
-| [`phiresponse`](../fillhistograms/analyse.cc#L803) | `phi_reco - phi_gen` distribution | [MCJPR.C](../JER/MCJPR.C#L8-150) |
-| [`asymmdist3D_a10` ... `a45`](../fillhistograms/analyse.cc#L613) | asymmetry distributions per alpha cut | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) |
-| [`absasymmdist3D_a10` ... `a45`](../fillhistograms/analyse.cc#L614) | absolute asymmetry distributions per alpha cut | [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) |
+| `responses3D` | reco/gen jet response distribution vs pT and eta | `MCJER.C`, `MCRESP.C` |
+| `etaresponse` | eta residual distribution | `MCJPR.C` with `doeta=true` |
+| `phiresponse` | phi residual distribution | `MCJPR.C` with `doeta=false` |
+| `asymmdist3D_a*` | asymmetry distributions per alpha cut | `JERSF_fits.C` |
+| `absasymmdist3D_a*` | absolute asymmetry distributions per alpha cut | `JERSF_RMS.C` |
 
-## Minimal chain detail
+## Minimal Chain Detail
 
 ### 1. MC truth resolution
 
-| Macro | What it extracts | Output object |
-| --- | --- | --- |
-| [MCJER.C](../JER/MCJER.C#L5-154) | Gaussian width of reco/gen response in each `(pT_gen, eta)` bin | `widths_<etaBin>`, `fit_eta_<etaRange>` |
-| [MCJPR.C](../JER/MCJPR.C#L8-150) | Gaussian width of eta or phi residuals | `widths_<etaBin>`, `fit_eta_<etaRange>` |
-| [MCRESP.C](../JER/MCRESP.C#L1-85) | mean response only | `widths_<etaBin>` as response means |
+`MCJER.C` fits the reco/gen jet response widths in bins of pT and eta. `MCJPR.C` fits eta or phi residual widths. `MCRESP.C` extracts the mean response only.
 
-Fit forms used for the text export:
+Fit forms used later by the text writer:
 
 | Case | Expression |
 | --- | --- |
 | jet pT resolution | `sqrt([0]*[0]/(x*x)+[1]*[1]*pow(x,[3])+[2]*[2])` |
-| eta or phi resolution | `sqrt(pow([0],2)+pow([1],2)/x+pow([2]/x,2)+pow([3]/x,3))` |
+| eta or phi residual resolution | `sqrt(pow([0],2)+pow([1],2)/x+pow([2]/x,2)+pow([3]/x,3))` |
 
 ### 2. JER scale factors from asymmetry widths
 
 The scale-factor branch starts from the asymmetry histograms and ends with one scale factor per eta bin.
 
-| Stage | Key output |
+| Stage | Main output |
 | --- | --- |
-| [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) | `gsigmasMC*`, `gsigmasDT*` from Gaussian widths |
-| [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) | `gsigmasMC*`, `gsigmasDT*` from truncated RMS |
-| [JERSF_fits_vsalpha.C](../JER/JERSF_fits_vsalpha.C#L5-149) | `ratio_<etaBin>` and final `SF` histogram |
-| [JERSF_printtxt.C](../JER/JERSF_printtxt.C#L1-34) | JetMET scale-factor text file |
+| `JERSF_fits.C` | sigma graphs from Gaussian widths |
+| `JERSF_RMS.C` | sigma graphs from truncated RMS widths |
+| `JERSF_fits_vsalpha.C` | `ratio_<etaBin>` and final `SF` histogram |
+| `JERSF_printtxt.C` | JetMET scale-factor text file |
 
-The final SF extraction in [JERSF_fits_vsalpha.C](../JER/JERSF_fits_vsalpha.C#L96-149) is:
+`JERSF_fits_vsalpha.C` does the following:
 
-1. fit data and MC widths vs alpha with `pol1`
-2. take the alpha intercept as the `alpha -> 0` width
-3. build `Data/MC` vs pT
-4. fit that ratio with `pol0`
-5. store the constant in the `SF` histogram
+1. fits data and MC widths vs alpha with `pol1`
+2. takes the alpha intercept as the `alpha -> 0` width
+3. forms the data/MC ratio vs pT
+4. fits that ratio with `pol0`
+5. stores the constant in the `SF` histogram
 
-## Text outputs
+## Text Outputs
 
 ### 1. MC resolution text from `doTxtMCJER.C`
 
@@ -65,20 +169,13 @@ Headers:
 {1 JetEta 1 JetPt (sqrt([0]*[0]/(x*x)+[1]*[1]*pow(x,[3])+[2]*[2])) Resolution}
 ```
 
-or, for eta/phi residuals,
+or, for eta or phi residuals,
 
 ```text
 {1 JetEta 1 JetPt (sqrt(pow([0],2)+pow([1],2)/x+pow([2]/x,2)+pow([3]/x,3))) Resolution}
 ```
 
-Row layout written by [doTxtMCJER.C](../JER/doTxtMCJER.C#L12-52):
-
-| Column | Meaning |
-| --- | --- |
-| 1-2 | eta min, eta max |
-| 3 | number of parameters |
-| 4-5 | pT min, pT max |
-| 6-9 | `p0 p1 p2 p3` |
+Each row contains eta range, parameter count, pT validity range, and the fitted parameters.
 
 ### 2. JER scale-factor text from `JERSF_printtxt.C`
 
@@ -88,23 +185,14 @@ Header:
 { 2 JetEta JetPt 0 None ScaleFactor }
 ```
 
-Row layout written by [JERSF_printtxt.C](../JER/JERSF_printtxt.C#L1-34):
+Each row contains eta range, pT range, payload size `3`, and the same scale factor repeated three times.
 
-| Column | Meaning |
+## Final Files Worth Tracking
+
+| Product | Producer |
 | --- | --- |
-| 1-2 | eta min, eta max |
-| 3-4 | pT min, pT max |
-| 5 | number of payload entries, fixed to `3` |
-| 6-8 | scale factor repeated three times |
-
-The file is mirrored to negative eta and positive eta explicitly.
-
-## Final files worth tracking
-
-| Product | Produced by |
-| --- | --- |
-| MC resolution ROOT file with `fit_eta_*` | [MCJER.C](../JER/MCJER.C#L5-154) or [MCJPR.C](../JER/MCJPR.C#L8-150) |
-| MC resolution text file | [doTxtMCJER.C](../JER/doTxtMCJER.C#L12-52) |
-| sigma ROOT file from Gaussian or RMS branch | [JERSF_fits.C](../JER/JERSF_fits.C#L1-188) or [JERSF_RMS.C](../JER/JERSF_RMS.C#L1-236) |
-| final SF ROOT file containing `SF` | [JERSF_fits_vsalpha.C](../JER/JERSF_fits_vsalpha.C#L5-149) |
-| JER scale-factor text file | [JERSF_printtxt.C](../JER/JERSF_printtxt.C#L1-34) |
+| MC resolution ROOT files | `MCJER.C`, `MCJPR.C`, `MCRESP.C` |
+| MC resolution text file | `doTxtMCJER.C` |
+| sigma ROOT file | `JERSF_RMS.C` or `JERSF_fits.C` |
+| final SF ROOT file with `SF` | `JERSF_fits_vsalpha.C` |
+| JER scale-factor text file | `JERSF_printtxt.C` |

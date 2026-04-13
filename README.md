@@ -74,7 +74,13 @@ root -l -b -q 'analyse_PhotonJet.cc("/path/to/filelist_data.txt","photonjet_data
 cd ..
 
 root -l -b -q 'L3Residual/deriveL3_from_photonjet.C("/output/dir/filelist_mc_photonjet_mc.root","/output/dir/filelist_data_photonjet_data.root","L3Residual/L3_derived_photonjet.root",true,5,false,true)'
-root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root",60,300,"L3Res_photonjet",false,"2024ppRef","pp 480.4 pb^{-1}",true,false)'
+root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root","60-300","L3Res_photonjet","2024ppRef","pp 480.4 pb^{-1}",true,5,0.0,0.4,"fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt","L3Residual","")'
+```
+
+For a combined photon+jet and Z+jet fit, pass a comma-separated input list and matching fit windows:
+
+```bash
+root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root,L3Residual/L3_derived_zjet.root","60-400,80-300","L3Res_combined","2024ppRef","pp 480.4 pb^{-1}",true,5,0.0,0.4,"fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt","L3Residual","#gamma+jet,Z+jet")'
 ```
 
 ## Documentation map
