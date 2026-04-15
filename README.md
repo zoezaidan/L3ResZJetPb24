@@ -65,7 +65,7 @@ root -l -b -q 'JER/JERSF_printtxt.C("JER/JERSFs_fromfits.root","JER/JERSF_fromfi
 
 ### L3 residuals
 
-Photon+jet histogram production is in `fillhistograms/analyse_PhotonJet.cc`, followed by `L3Residual/deriveL3_from_photonjet.C` and `L3Residual/dofits_L3.C`.
+Photon+jet histogram production is in `fillhistograms/analyse_PhotonJet.cc`, followed by `L3Residual/deriveL3_from_photonjet.C`, `L3Residual/L3Res.C`, and `L3Residual/createL2L3ResTextFile.C`.
 
 ```bash
 cd fillhistograms
@@ -73,14 +73,24 @@ root -l -b -q 'analyse_PhotonJet.cc("/path/to/filelist_mc.txt","photonjet_mc",tr
 root -l -b -q 'analyse_PhotonJet.cc("/path/to/filelist_data.txt","photonjet_data",false,true,"filelist",-1,-1,"/output/dir")'
 cd ..
 
-root -l -b -q 'L3Residual/deriveL3_from_photonjet.C("/output/dir/filelist_mc_photonjet_mc.root","/output/dir/filelist_data_photonjet_data.root","L3Residual/L3_derived_photonjet.root",true,5,false,true)'
-root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root","60-300","L3Res_photonjet","2024ppRef","pp 480.4 pb^{-1}",true,5,0.0,0.4,"fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt","L3Residual","")'
+root -l -b -q 'L3Residual/deriveL3_from_photonjet.C("/output/dir/filelist_mc_photonjet_mc.root","/output/dir/filelist_data_photonjet_data.root","L3Residual/L3_derived_photonjet.root",5,false,true)'
+root -l -b -q 'L3Residual/L3Res.C("L3Residual/L3_derived_photonjet.root","photonjet","60-300","L3Res_photonjet","2024ppRef","pp 480.4 pb^{-1}",5,0.0,0.4,"L3Residual")'
+root -l -b -q 'L3Residual/createL2L3ResTextFile.C("L3Residual/L3Res_photonjet/L3Res_photonjet_fit.root","fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt")'
 ```
 
-For a combined photon+jet and Z+jet fit, pass a comma-separated input list and matching fit windows:
+The final text export keeps the input L2Residual rows intact and appends one global JetPt-based L3Residual function to every row. In other words, the combined payload is written in the same text-file style as the production JEC examples:
+
+```text
+L2Residual(eta, JetPt) * L3Residual(JetPt)
+```
+
+The exported JetPt fit is shown in `L3Res_<runLabel>_jetpt_export_fit.png`; that is the function written to the final text files.
+
+For a combined photon+jet and Z+jet fit, pass matching sample and fit-window lists:
 
 ```bash
-root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root,L3Residual/L3_derived_zjet.root","60-400,80-300","L3Res_combined","2024ppRef","pp 480.4 pb^{-1}",true,5,0.0,0.4,"fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt","L3Residual","#gamma+jet,Z+jet")'
+root -l -b -q 'L3Residual/L3Res.C("L3Residual/L3_derived_photonjet.root,L3Residual/L3_derived_zjet.root","photonjet,zjet","60-400,80-300","L3Res_combined","2024ppRef","pp 480.4 pb^{-1}",5,0.0,0.4,"L3Residual")'
+root -l -b -q 'L3Residual/createL2L3ResTextFile.C("L3Residual/L3Res_combined/L3Res_combined_fit.root","fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt")'
 ```
 
 ## Documentation map

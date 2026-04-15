@@ -1,56 +1,98 @@
 # L3Residual
 
-This page documents the photon+jet L3 residual workflow from histogram filling to the final text payloads. The source macros are:
+This page documents the active photon+jet L3 residual workflow. The split fit/export chain is:
 
 - [fillhistograms/analyse_PhotonJet.cc](../fillhistograms/analyse_PhotonJet.cc)
 - [L3Residual/deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C)
-- [L3Residual/dofits_L3.C](../L3Residual/dofits_L3.C)
+- [L3Residual/L3Res.C](../L3Residual/L3Res.C)
+- [L3Residual/createL2L3ResTextFile.C](../L3Residual/createL2L3ResTextFile.C)
+
+[L3Residual/dofits_L3.C](../L3Residual/dofits_L3.C) is now an optional thin wrapper for the split chain above; the active implementation lives in the split macros themselves.
 
 ## At a glance
 
 | Stage | Macro | Required inputs | Main outputs |
 | --- | --- | --- | --- |
-| Histogram filling | [analyse_PhotonJet.cc](../fillhistograms/analyse_PhotonJet.cc) | photon tree, jet tree, event filters, alpha thresholds | `photonjet_balance3D*`, `photonjet_balance3D*_counts`, `photonjet_balance_dist` |
-| Derivation | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C) | MC and data `photonjet_balance3D*` | `ratio_vsphotonpt_alphaN`, `ratio_norm_vsphotonpt_alphaN`, `L3Res_vsa*`, `balance3D_mc`, `balance3D_data` |
-| Final fit | [dofits_L3.C](../L3Residual/dofits_L3.C) | one or more derived ROOT files, optional L2 text file | per-input alpha diagnostics, final L3 fit, L3 text file, optional combined L2L3 text file |
+| Histogram filling | [analyse_PhotonJet.cc](../fillhistograms/analyse_PhotonJet.cc) | photon+jet trees and event filters | `photonjet_balance3D*`, `photonjet_balance3D*_counts`, `photonjet_balance_dist` |
+| Derivation | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C) | MC and data `photonjet_balance3D*` histograms | `ratio_vsptref_alphaN`, `ratio_norm_vsptref_alphaN`, `ratio_vsjetpt_alphaN`, `L3Res_vsa*`, `balance3D_mc`, `balance3D_data` |
+| Shared pTref fit | [L3Res.C](../L3Residual/L3Res.C) | one or more derived ROOT files, explicit sample list, fit windows | per-input alpha diagnostics, `kFSR`, `corr_vsptref`, `corr_vsjetpt`, combined sequential pTref fit, combined direct JetPt graph, fit ROOT file, validation plots |
+| Text export | [createL2L3ResTextFile.C](../L3Residual/createL2L3ResTextFile.C) | fit ROOT file from `L3Res.C`, L2Residual text payload | local L3 text file, exported L3 text file, combined L2L3 text file, shared pTref export plot, shared JetPt export plot |
 
-## Runnable Macros
+## Macro signatures
 
-### 1. Histogram production with `analyse_PhotonJet.cc`
-
-Signature:
+### `deriveL3_from_photonjet.C`
 
 ```cpp
-void analyse_PhotonJet(string input = "PHOTONHP",
-                       string outputfiletag = "AK4_photonjet",
-                       bool isMC = false,
-                       bool checkjetid = false,
-                       string inputType = "era",
-                       int maxFiles = -1,
-                       int maxEvents = -1,
-                       string outputDir = "",
-                       int batchIndex = -1,
-                       int totalBatches = 1,
-                       string jetPath = "ak4PFJetAnalyzer/t")
+void deriveL3_from_photonjet(TString mcFile,
+                             TString dataFile,
+                             TString outfilename = "L3Residual_PhotonJet.root",
+                             int refAlphaBin = 5,
+                             bool useabs = true,
+                             bool usewideabs = false)
 ```
 
-Parameters:
+Purpose:
 
-| Parameter | Meaning |
-| --- | --- |
-| `input` | era key, file path, directory path, or filelist path depending on `inputType` |
-| `outputfiletag` | tag appended to the produced ROOT filename |
-| `isMC` | switches MC-only branches and pThat weighting |
-| `checkjetid` | enables the jet ID requirement |
-| `inputType` | one of `era`, `file`, `directory`, or `filelist` |
-| `maxFiles` | maximum number of input files to read, `-1` means all |
-| `maxEvents` | maximum number of events to process, `-1` means all |
-| `outputDir` | directory where the histogram ROOT file is written |
-| `batchIndex` | current batch slot for Condor splitting |
-| `totalBatches` | total number of batch slots |
-| `jetPath` | jet tree path such as `ak4PFJetAnalyzer/t` or `ak4PFJetAnalyzerSDZcut1/t` |
+- read the photon+jet 3D balance profiles from MC and data
+- preserve the input pT binning directly from the histograms
+- build the derived `pTref` and JetPt ratio series for every cumulative alpha bin
+- write the normalized alpha series used later for `kFSR` extraction
 
-Minimal examples:
+Important notes:
+
+- The macro requires the direct JetPt balance profiles already stored by the filler. It does not fall back to a photon-pT-derived approximation.
+- `refAlphaBin` is the cumulative alpha bin used for the eta maps and for the normalized alpha series.
+
+### `L3Res.C`
+
+```cpp
+void L3Res(TString inFileL3Derived = "L3_derived.root",
+           TString sampleTypesCSV = "",
+           TString inputPtRangesCSV = "",
+           string outfilename = "L3Res_photonjet",
+           string runLabel = "2024ppRef",
+           string lumiLabel = "pp 480.4 pb^{-1}",
+           int refAlphaBin = 5,
+           double fitAlphaMin = 0.0,
+           double fitAlphaMax = 0.4,
+           string outBaseDir = "L3Residual")
+```
+
+Purpose:
+
+- run the alpha fits in each selected input independently
+- build `kFSR` and the `alpha -> 0` corrected `corr_vsptref` histogram for each input
+- build the corresponding `alpha -> 0` corrected `corr_vsjetpt` histogram from the direct JetPt ratio series
+- combine the selected `pTref` points from all inputs into one shared fit
+- combine the selected JetPt points from all inputs into one shared direct JetPt graph
+- apply the template-style sequential fit chain in `pTref`
+- save the fit ROOT file consumed by `createL2L3ResTextFile.C`
+
+Sample values:
+
+- `photonjet`
+- `zjet`
+
+The sample list is mandatory for multi-input fits. The macro does not guess labels or tags from filenames.
+
+### `createL2L3ResTextFile.C`
+
+```cpp
+void createL2L3ResTextFile(TString fitRootFile = "L3Residual/L3Res_photonjet/L3Res_photonjet_fit.root",
+                           string l2ResidualFile = "fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt")
+```
+
+Purpose:
+
+- refit the shared `pTref` response with the template export function
+- fit one global JetPt-based L3 response from the combined direct JetPt graph stored by `L3Res.C`
+- clone each eta row from the input L2Residual text payload
+- append the same global JetPt L3 correction block to every cloned row
+- write the standalone L3 text file and the combined L2L3 text file
+
+## Minimal workflow
+
+### 1. Produce photon+jet input histograms
 
 ```bash
 cd fillhistograms
@@ -59,239 +101,95 @@ root -l -b -q 'analyse_PhotonJet.cc("/path/to/filelist_data.txt","photonjet_data
 cd ..
 ```
 
-### 2. Derivation with `deriveL3_from_photonjet.C`
-
-Signature:
-
-```cpp
-void deriveL3_from_photonjet(TString mcFile,
-                             TString dataFile,
-                             TString outfilename = "L3Residual_PhotonJet.root",
-                             bool dodt = true,
-                             int alphabin = 5,
-                             bool useabs = true,
-                             bool usewideabs = false)
-```
-
-Parameters:
-
-| Parameter | Meaning |
-| --- | --- |
-| `mcFile` | photon+jet histogram ROOT file from MC |
-| `dataFile` | photon+jet histogram ROOT file from data |
-| `outfilename` | output derived ROOT file |
-| `dodt` | retained for compatibility, not used to branch the current derivation logic |
-| `alphabin` | reference cumulative alpha bin used for the eta maps |
-| `useabs` | use the absolute-eta histogram branch |
-| `usewideabs` | use the wide absolute-eta histogram branch; this overrides `useabs` |
-
-Example:
+### 2. Derive the L3 input histograms
 
 ```bash
-root -l -b -q 'L3Residual/deriveL3_from_photonjet.C("/output/dir/filelist_mc_photonjet_mc.root","/output/dir/filelist_data_photonjet_data.root","L3Residual/L3_derived_photonjet.root",true,5,false,true)'
+root -l -b -q 'L3Residual/deriveL3_from_photonjet.C("/output/dir/filelist_mc_photonjet_mc.root","/output/dir/filelist_data_photonjet_data.root","L3Residual/L3_derived_photonjet.root",5,false,true)'
 ```
 
-### 3. Final fit with `dofits_L3.C`
-
-Signature:
-
-```cpp
-void dofits_L3(TString inFileL3Derived = "L3_derived.root",
-               TString inputPtRangesCSV = "",
-               string outfilename = "L3Res_photonjet",
-               string runLabel = "2024ppRef",
-               string lumiLabel = "pp 480.4 pb^{-1}",
-               bool saveAlphaExtrap = true,
-               int refAlphaBin = 5,
-               double fitAlphaMin = 0.0,
-               double fitAlphaMax = 0.4,
-               string l2ResidualFile = "fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt",
-               string outBaseDir = "L3Residual",
-               TString inputLabelsCSV = "")
-```
-
-Parameters:
-
-| Parameter | Meaning |
-| --- | --- |
-| `inFileL3Derived` | one derived ROOT file or a comma-separated list of derived ROOT files |
-| `inputPtRangesCSV` | fit window per input, for example `80-300` or `60-400,80-300`; empty means use the full correction-histogram range for each input |
-| `outfilename` | output tag used for the fit ROOT file and local text output |
-| `runLabel` | run label used in plot names and exported text filenames |
-| `lumiLabel` | luminosity label passed to the plot stamp |
-| `saveAlphaExtrap` | if `true`, run or reuse per-input alpha extrapolation and save diagnostics under `inputs/<token>/alpha_extrap/` |
-| `refAlphaBin` | reference cumulative alpha bin used as the denominator for alpha normalization |
-| `fitAlphaMin` | lower alpha boundary for the linear alpha extrapolation |
-| `fitAlphaMax` | upper alpha boundary for the linear alpha extrapolation |
-| `l2ResidualFile` | optional L2 text file used to reuse eta bins and to build the combined L2L3 text file |
-| `outBaseDir` | parent output directory |
-| `inputLabelsCSV` | optional comma-separated labels used in the combined plot legend and per-input output folder names |
-
-Single-input example:
+### 3. Fit the shared pTref response
 
 ```bash
-root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root","60-300","L3Res_photonjet","2024ppRef","pp 480.4 pb^{-1}",true,5,0.0,0.4,"fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt","L3Residual","")'
+root -l -b -q 'L3Residual/L3Res.C("L3Residual/L3_derived_photonjet.root","photonjet","60-400","L3Res_photonjet","2024ppRef","pp 480.4 pb^{-1}",5,0.0,0.4,"L3Residual")'
 ```
 
-Combined-input example:
+### 4. Export the text payloads
 
 ```bash
-root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root,L3Residual/L3_derived_zjet.root","60-400,80-300","L3Res_combined","2024ppRef","pp 480.4 pb^{-1}",true,5,0.0,0.4,"fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt","L3Residual","#gamma+jet,Z+jet")'
+root -l -b -q 'L3Residual/createL2L3ResTextFile.C("L3Residual/L3Res_photonjet/L3Res_photonjet_fit.root","fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt")'
 ```
 
-## Essential Histograms
+### Combined photon+jet and Z+jet fit
 
-### Filled in `analyse_PhotonJet.cc`
+```bash
+root -l -b -q 'L3Residual/L3Res.C("L3Residual/L3_derived_photonjet.root,L3Residual/L3_derived_zjet.root","photonjet,zjet","60-400,80-300","L3Res_combined","2024ppRef","pp 480.4 pb^{-1}",5,0.0,0.4,"L3Residual")'
+root -l -b -q 'L3Residual/createL2L3ResTextFile.C("L3Residual/L3Res_combined/L3Res_combined_fit.root","fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt")'
+```
 
-| Histogram family | Meaning | Used by |
-| --- | --- | --- |
-| `photonjet_balance3D*` | balance profile vs photon pT, eta, and cumulative alpha | `deriveL3_from_photonjet.C` |
-| `photonjet_balance3Dabseta*` | same payload in absolute eta | `deriveL3_from_photonjet.C` |
-| `photonjet_balance3D*_counts` | event counts per `(pT, eta, alpha)` bin | `deriveL3_from_photonjet.C`, QA |
-| `photonjet_balance_dist` | balance distribution vs photon pT and alpha | optional distribution overlays |
+## What the stages do
 
-### Produced by `deriveL3_from_photonjet.C`
+### Derivation
 
-| Output | Meaning |
-| --- | --- |
-| `L3Res_vsa_<ptbin>_<etabin>` | MC/data ratio vs alpha in one pT and eta bin |
-| `L3Res_vsa_norm_<ptbin>_<etabin>` | the same ratio normalized to the reference alpha bin |
-| `ratio_vsphotonpt_alphaN` | MC/data ratio vs photon pT for cumulative alpha bin `N` |
-| `ratio_norm_vsphotonpt_alphaN` | `ratio_vsphotonpt_alphaN / ratio_vsphotonpt_alphaRef` |
-| `balance3D_mc`, `balance3D_data` | copied 3D profiles used by `dofits_L3.C` if raw alpha extrapolation is rerun |
-| `counts3D_mc`, `counts3D_data` | copied 3D count histograms |
+The derivation stage stores the full alpha series in both `pTref` and JetPt:
 
-## Minimal Chain Detail
+- `ratio_vsptref_alphaN`
+- `ratio_norm_vsptref_alphaN`
+- `ratio_vsjetpt_alphaN`
+- `L3Res_vsa_<ptbin>_<etabin>`
+- `L3Res_vsa_norm_<ptbin>_<etabin>`
 
-### 1. Histogram filling
+All `pTref` binning comes directly from the input histogram axis. The eta output histograms use the axis definitions from the loaded balance histogram branch and the repository bin arrays in [fillhistograms/histograms.h](../fillhistograms/histograms.h).
 
-The response variable propagated through the chain is
+### Shared pTref fit
 
-$$
-\mathrm{balance} = \frac{p_{T,\mathrm{jet}}}{p_{T,\gamma}}.
-$$
+`L3Res.C` fits the normalized alpha series linearly in `alpha` to extract `kFSR` in each `pTref` bin, forms the corrected `corr_vsptref`, and then applies the template-style sequential fit chain:
 
-The second away-side jet defines
+1. constant
+2. log-linear
+3. log-linear + `1/x`
+4. quadratic in `log10(0.01*x)`
+5. quadratic + `1/x`
+6. final exported reference fit: log-linear + `1/x`
 
-$$
-\alpha = \frac{p_{T,\mathrm{2nd\ away\ jet}}}{p_{T,\gamma}}.
-$$
-
-The filler writes cumulative alpha bins. Each stored alpha bin already represents `alpha < threshold`.
-
-### 2. Derivation
-
-The derivation stage forms MC/data balance ratios by eta, alpha, and photon pT. The reference-alpha normalized outputs are the direct inputs for the alpha extrapolation in the final fit macro.
-
-### 3. Final fit in `dofits_L3.C`
-
-The fit macro runs the same flow for one input or several inputs:
-
-1. prepare each input independently
-2. derive or reuse `alpha -> 0` corrections for each input
-3. concatenate the selected pT points from all inputs
-4. fit one shared L3 correction function
-
-If `saveAlphaExtrap=true`, each input gets its own output directory:
+Only the final shared fit is shown in the main pTref summary plot. The per-input alpha fits and `kFSR` summaries are written under:
 
 ```text
 <outBaseDir>/<outfilename>/inputs/<token>/pdf/
 <outBaseDir>/<outfilename>/inputs/<token>/alpha_extrap/
-<outBaseDir>/<outfilename>/inputs/<token>/textfiles/
 ```
 
-Input preparation rules:
+### Text export
 
-| Input content | Behavior |
-| --- | --- |
-| `ratio_vsphotonpt_alphaN` present | recompute the alpha extrapolation from the stored ratio histograms |
-| archived `gAlphaNorm_pt*`, `fAlpha_pt*_col`, `kFSR_vsPt`, and `ratio_vspT_alpha0` present | reuse the archived alpha diagnostics and correction histogram |
-| only `corr_vspT` or `ratio_vspT_alpha0` present | skip alpha refit and use the stored correction directly |
-
-The final fit function is
-
-$$
-C_{L3}(x) = \frac{1}{p_0 + \frac{p_1}{x} + \frac{p_2 \log(x)}{x} + p_3 \frac{(x/p_4)^{p_5} - 1}{(x/p_4)^{p_5} + 1} + p_6 x^{-0.3051} + p_7 x},
-$$
-
-with $x = p_T^\gamma$.
-
-The pT validity written into the final text file comes from the effective fit windows:
-
-| Mode | Written pT validity |
-| --- | --- |
-| single input | the selected window for that input |
-| multiple inputs | the union of the selected per-input windows used in the combined fit |
-
-## Text Outputs
-
-### 1. L3 residual text file
-
-The exported header is
+`createL2L3ResTextFile.C` keeps the L2 text payload as the reference row layout and writes one global JetPt-based L3Residual function for the full sample. The same fitted L3 block is repeated for every eta row so the combined file has the form
 
 ```text
-{ 1 JetEta 1 JetPt 1./([0]+[1]/x+[2]*log(x)/x+[3]*(pow(x/[4],[5])-1)/(pow(x/[4],[5])+1)+[6]*pow(x,-0.3051)+[7]*x) Correction L2Relative}
+L2Residual(eta, JetPt) * L3Residual(JetPt)
 ```
 
-The correction name is kept as `L2Relative` to match the payload convention already used in this repository.
+The pTref fit is still used as a diagnostic export view, but the final text payload is anchored to the direct JetPt response stored upstream by `deriveL3_from_photonjet.C` and collected by `L3Res.C`. The output folder contains:
 
-Each row is written as
+- `<outfilename>.txt`: local standalone L3 payload
+- `L3Residuals_<runLabel>_<tag>_AK4PF.txt`: exported standalone L3 payload
+- `L2L3Residuals_<runLabel>_<tag>_AK4PF.txt`: combined L2L3 payload
+
+The export validation plots are written in:
 
 ```text
-etaMin etaMax 10 ptMin ptMax p0 p1 p2 p3 p4 p5 p6 p7
+<outBaseDir>/<outfilename>/pdf/
 ```
 
-Column meaning:
+The two key export figures are:
 
-| Column block | Meaning |
-| --- | --- |
-| `etaMin etaMax` | eta validity range |
-| `10` | payload size, equal to `2` range values plus `8` fit parameters |
-| `ptMin ptMax` | pT validity range used by the final fit |
-| `p0 ... p7` | parameters of the final L3 fit function |
+- `L3Res_<runLabel>_ptref_export_fit.png`: the shared pTref response points and the template-style pTref export fit. This is a consistency view of the original alpha-corrected quantity `R_{L3} = B^{Data}/B^{MC}` as a function of the reference-object pT.
+- `L3Res_<runLabel>_jetpt_export_fit.png`: the combined direct JetPt response points and the single JetPt fit that is actually written to the final text payloads. The markers are the alpha-corrected direct JetPt response values aggregated over all inputs, and the red curve is the exported global L3Residual response function used in every text row.
 
-If an L2 text file is supplied, the L3 writer reuses the eta binning from that L2 file. Otherwise one eta range is written using the input histogram eta support.
+## Raw-distribution checks
 
-Files written:
+To inspect the raw input distributions before the fit, run:
 
-| Path | Meaning |
-| --- | --- |
-| `<outBaseDir>/<outfilename>/textfiles/<outfilename>.txt` | local copy of the L3 result |
-| `<outBaseDir>/<outfilename>/textfiles/L3Residuals_<run>_<tag>_AK4PF.txt` | JetMET-style export |
-
-For a single default photon+jet input, `<tag>` is `photonjet`. For a combined fit, `<tag>` is `combined`.
-
-### 2. Combined L2L3 residual text file
-
-If the L2 text file can be read, `dofits_L3.C` also writes a combined L2L3 payload. The writer:
-
-1. reads the original L2 formula and eta binning
-2. appends the shifted L3 fit expression to that L2 formula
-3. writes the original L2 parameters followed by the fitted L3 parameters
-
-The combined header is therefore the original L2 expression multiplied by the shifted L3 expression, with the original correction name preserved.
-
-Each row contains:
-
-| Block | Meaning |
-| --- | --- |
-| eta range and pT range | copied from the L2 input record |
-| original L2 parameters | copied from the L2 input record |
-| appended L3 parameters | the `p0 ... p7` values from the final fit |
-
-Written file:
-
-```text
-<outBaseDir>/<outfilename>/textfiles/L2L3Residuals_<run>_<tag>_AK4PF.txt
+```bash
+root -l -b -q 'L3Residual/plotresponse_L3.C("/path/to/data_histograms.root","Data")'
+root -l -b -q 'L3Residual/plotresponse_L3.C("/path/to/mc_histograms.root","MC",true)'
 ```
 
-## Final Files Worth Tracking
-
-| Product | Producer |
-| --- | --- |
-| photon+jet histogram ROOT file | `analyse_PhotonJet.cc` |
-| derived L3 ROOT file | `deriveL3_from_photonjet.C` |
-| per-input alpha diagnostic ROOT files | `dofits_L3.C` |
-| final fit ROOT file | `dofits_L3.C` |
-| final L3 text file | `dofits_L3.C` |
-| optional combined L2L3 text file | `dofits_L3.C` |
+These plots are the fastest way to validate the starting point before running the derived fit chain.
