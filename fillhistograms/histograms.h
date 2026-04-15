@@ -151,6 +151,12 @@ class histograms {
   TProfile3D* photonjet_balance3Dabseta;
   TProfile3D* photonjet_balance3Dabsetawide;
   TProfile3D* photonjet_balance3Dabsetanarrow;
+  TProfile3D* photonjet_balance3D_jetpt;
+  TProfile3D* photonjet_balance3Dwide_jetpt;
+  TProfile3D* photonjet_balance3Dnarrow_jetpt;
+  TProfile3D* photonjet_balance3Dabseta_jetpt;
+  TProfile3D* photonjet_balance3Dabsetawide_jetpt;
+  TProfile3D* photonjet_balance3Dabsetanarrow_jetpt;
   TH3D* photonjet_balance3D_counts;
   TH3D* photonjet_balance3Dwide_counts;
   TH3D* photonjet_balance3Dnarrow_counts;

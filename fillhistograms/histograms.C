@@ -59,6 +59,9 @@ void histograms::initializePointers() {
   photonjet_balance3D = nullptr; photonjet_balance3Dwide = nullptr;
   photonjet_balance3Dnarrow = nullptr; photonjet_balance3Dabseta = nullptr;
   photonjet_balance3Dabsetawide = nullptr; photonjet_balance3Dabsetanarrow = nullptr;
+  photonjet_balance3D_jetpt = nullptr; photonjet_balance3Dwide_jetpt = nullptr;
+  photonjet_balance3Dnarrow_jetpt = nullptr; photonjet_balance3Dabseta_jetpt = nullptr;
+  photonjet_balance3Dabsetawide_jetpt = nullptr; photonjet_balance3Dabsetanarrow_jetpt = nullptr;
   photonjet_balance3D_counts = nullptr; photonjet_balance3Dwide_counts = nullptr;
   photonjet_balance3Dnarrow_counts = nullptr; photonjet_balance3Dabseta_counts = nullptr;
   photonjet_balance3Dabsetawide_counts = nullptr; photonjet_balance3Dabsetanarrow_counts = nullptr;
@@ -303,6 +306,12 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
       photonjet_balance3Dabseta = new TProfile3D("photonjet_balance3Dabseta", "Balance vs p_{T,avg}, |#eta_{jet}|, #alpha", nptforjec, &ptforjec[0], nwabsetas, &wabsetarange[0], nalphavalues, &alphavalues[0]);
       photonjet_balance3Dabsetawide = new TProfile3D("photonjet_balance3Dabsetawide", "Balance (wide |#eta| bins)", nptforjec, &ptforjec[0], ndwabsetas, &dwabsetarange[0], nalphavalues, &alphavalues[0]);
       photonjet_balance3Dabsetanarrow = new TProfile3D("photonjet_balance3Dabsetanarrow", "Balance (narrow |#eta| bins)", nptforjec, &ptforjec[0], nabsetas, &absetarange[0], nalphavalues, &alphavalues[0]);
+      photonjet_balance3D_jetpt = new TProfile3D("photonjet_balance3D_jetpt", "Balance vs p_{T}^{jet}, #eta_{jet}, #alpha", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
+      photonjet_balance3Dwide_jetpt = new TProfile3D("photonjet_balance3Dwide_jetpt", "Balance vs p_{T}^{jet} (wide #eta bins)", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
+      photonjet_balance3Dnarrow_jetpt = new TProfile3D("photonjet_balance3Dnarrow_jetpt", "Balance vs p_{T}^{jet} (narrow #eta bins)", nptforjec, &ptforjec[0], netas, &etarange[0], nalphavalues, &alphavalues[0]);
+      photonjet_balance3Dabseta_jetpt = new TProfile3D("photonjet_balance3Dabseta_jetpt", "Balance vs p_{T}^{jet}, |#eta_{jet}|, #alpha", nptforjec, &ptforjec[0], nwabsetas, &wabsetarange[0], nalphavalues, &alphavalues[0]);
+      photonjet_balance3Dabsetawide_jetpt = new TProfile3D("photonjet_balance3Dabsetawide_jetpt", "Balance vs p_{T}^{jet} (wide |#eta| bins)", nptforjec, &ptforjec[0], ndwabsetas, &dwabsetarange[0], nalphavalues, &alphavalues[0]);
+      photonjet_balance3Dabsetanarrow_jetpt = new TProfile3D("photonjet_balance3Dabsetanarrow_jetpt", "Balance vs p_{T}^{jet} (narrow |#eta| bins)", nptforjec, &ptforjec[0], nabsetas, &absetarange[0], nalphavalues, &alphavalues[0]);
       photonjet_balance3D_counts = new TH3D("photonjet_balance3D_counts", "Entries vs p_{T,avg}, #eta_{jet}, #alpha", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
       photonjet_balance3Dwide_counts = new TH3D("photonjet_balance3Dwide_counts", "Entries (wide #eta bins)", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
       photonjet_balance3Dnarrow_counts = new TH3D("photonjet_balance3Dnarrow_counts", "Entries (narrow #eta bins)", nptforjec, &ptforjec[0], netas, &etarange[0], nalphavalues, &alphavalues[0]);

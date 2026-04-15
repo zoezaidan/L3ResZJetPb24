@@ -1,3 +1,6 @@
+#ifndef L3RESIDUAL_TDRSTYLE_SOURCE
+#define L3RESIDUAL_TDRSTYLE_SOURCE
+
 #include "TStyle.h"
 
 void setTDRStyle() {
@@ -73,7 +76,7 @@ void setTDRStyle() {
   // tdrStyle->SetStatY(Float_t y = 0);
 
   // Margins:
-  tdrStyle->SetPadTopMargin(0.05);
+  tdrStyle->SetPadTopMargin(0.08);
   tdrStyle->SetPadBottomMargin(0.13);
   tdrStyle->SetPadLeftMargin(0.16);
   tdrStyle->SetPadRightMargin(0.02);
@@ -97,11 +100,11 @@ void setTDRStyle() {
 
   tdrStyle->SetTitleColor(1, "XYZ");
   tdrStyle->SetTitleFont(42, "XYZ");
-  tdrStyle->SetTitleSize(0.06, "XYZ");
+  tdrStyle->SetTitleSize(0.050, "XYZ");
   // tdrStyle->SetTitleXSize(Float_t size = 0.02); // Another way to set the size?
   // tdrStyle->SetTitleYSize(Float_t size = 0.02);
   tdrStyle->SetTitleXOffset(1.0);
-  tdrStyle->SetTitleYOffset(1.1);
+  tdrStyle->SetTitleYOffset(1.25);
   // tdrStyle->SetTitleOffset(1.1, "Y"); // Another way to set the Offset
 
   // For the axis labels:
@@ -109,7 +112,7 @@ void setTDRStyle() {
   tdrStyle->SetLabelColor(1, "XYZ");
   tdrStyle->SetLabelFont(42, "XYZ");
   tdrStyle->SetLabelOffset(0.007, "XYZ");
-  tdrStyle->SetLabelSize(0.05, "XYZ");
+  tdrStyle->SetLabelSize(0.038, "XYZ");
 
   // For the axis:
 
@@ -144,3 +147,5 @@ void setTDRStyle() {
 
   tdrStyle->cd();
 }
+
+#endif

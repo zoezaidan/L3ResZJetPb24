@@ -20,14 +20,14 @@ float extraTextFont = 52;  // default is helvetica-italics
 
 // text sizes and text offsets with respect to the top frame
 // in unit of the top margin size
-float lumiTextSize = 0.45;  // Reduced from 0.6
+float lumiTextSize = 0.48;
 float lumiTextOffset = 0.2;
-float cmsTextSize = 0.55;   // Reduced from 0.75
+float cmsTextSize = 0.78;
 float cmsTextOffset = 0.1;  // only used in outOfFrame version
 
 float relPosX = 0.045;
-float relPosY = 0.035;
-float relExtraDY = 2.0;  // Increased spacing between "CMS" and "Preliminary"
+float relPosY = 0.020;
+float relExtraDY = 1.85;
 
 // ratio of "CMS" and extra text size
 float extraOverCmsTextSize = 0.76;

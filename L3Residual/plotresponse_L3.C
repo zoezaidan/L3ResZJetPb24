@@ -41,11 +41,23 @@ static void DrawSelectionText(double ptMin, double ptMax, double alphaCutMax,
   latex.SetTextSize(0.035);
   latex.DrawLatex(0.18, 0.86, Form("%.0f < p_{T}^{#gamma} < %.0f GeV", ptMin, ptMax));
   latex.DrawLatex(0.18, 0.81, Form("#alpha < %.2f", alphaCutMax));
+  latex.DrawLatex(0.18, 0.76, "B_{#gamma+jet} = p_{T}^{jet}/p_{T}^{#gamma}");
   if (hasMC) {
-    latex.DrawLatex(0.18, 0.76, Form("#LTp_{T}^{jet}/p_{T}^{#gamma}#GT: Data %.3f, MC %.3f", meanData, meanMC));
+    latex.DrawLatex(0.18, 0.71, Form("#LTB_{#gamma+jet}^{Data}#GT = %.3f", meanData));
+    latex.DrawLatex(0.18, 0.66, Form("#LTB_{#gamma+jet}^{MC}#GT = %.3f", meanMC));
   } else {
-    latex.DrawLatex(0.18, 0.76, Form("#LTp_{T}^{jet}/p_{T}^{#gamma}#GT: %.3f", meanData));
+    latex.DrawLatex(0.18, 0.71, Form("#LTB_{#gamma+jet}#GT = %.3f", meanData));
   }
+}
+
+static void StyleAxes(TH1* hist, double yTitleOffset = 1.35) {
+  if (!hist) return;
+  hist->GetXaxis()->SetTitleSize(0.042);
+  hist->GetYaxis()->SetTitleSize(0.042);
+  hist->GetXaxis()->SetLabelSize(0.032);
+  hist->GetYaxis()->SetLabelSize(0.032);
+  hist->GetXaxis()->SetTitleOffset(1.05);
+  hist->GetYaxis()->SetTitleOffset(yTitleOffset);
 }
 
 void plotresponse_L3(TString inputFile = "",
@@ -68,6 +80,7 @@ void plotresponse_L3(TString inputFile = "",
   
   writeExtraText = true;
   extraText = "Preliminary";
+  cmsTextSize = 0.78;
   lumi_sqrtS = Form("%s, #sqrt{s} = 5.36 TeV", lumiLabel.Data());
   
   TFile* inFile = TFile::Open(inputFile, "READ");
@@ -162,10 +175,7 @@ void plotresponse_L3(TString inputFile = "",
       h1->SetMarkerSize(0.6);
       h1->GetXaxis()->SetTitle(xLabel.c_str());
       h1->GetYaxis()->SetTitle(yLabel.c_str());
-      h1->GetXaxis()->SetTitleSize(0.045);
-      h1->GetYaxis()->SetTitleSize(0.045);
-      h1->GetXaxis()->SetLabelSize(0.04);
-      h1->GetYaxis()->SetLabelSize(0.04);
+      StyleAxes(h1);
       h1->Draw("E");
 
       CMS_lumi(c, 0, 0);
@@ -200,12 +210,8 @@ void plotresponse_L3(TString inputFile = "",
       h1_norm->SetLineWidth(2);
       h1_norm->SetMarkerColor(kRed + 1);
       h1_norm->GetXaxis()->SetTitle(xLabel.c_str());
-      h1_norm->GetYaxis()->SetTitle("Norm. Events");
-      h1_norm->GetYaxis()->SetTitleOffset(1.45);
-      h1_norm->GetXaxis()->SetTitleSize(0.045);
-      h1_norm->GetYaxis()->SetTitleSize(0.045);
-      h1_norm->GetXaxis()->SetLabelSize(0.04);
-      h1_norm->GetYaxis()->SetLabelSize(0.04);
+      h1_norm->GetYaxis()->SetTitle("1/N dN/dX");
+      StyleAxes(h1_norm, 1.40);
       h1_norm->Draw("E");
       
       hMC_norm->SetLineColor(kBlue + 1);
@@ -284,13 +290,9 @@ void plotresponse_L3(TString inputFile = "",
         h_bal->SetMarkerStyle(20);
         h_bal->SetMarkerColor(kBlue + 1);
         h_bal->SetMarkerSize(0.6);
-        h_bal->GetXaxis()->SetTitle("p_{T}^{jet} / p_{T}^{#gamma}");
+        h_bal->GetXaxis()->SetTitle("B_{#gamma+jet}");
         h_bal->GetYaxis()->SetTitle("Events");
-        h_bal->GetYaxis()->SetTitleOffset(1.45);
-        h_bal->GetXaxis()->SetTitleSize(0.045);
-        h_bal->GetYaxis()->SetTitleSize(0.045);
-        h_bal->GetXaxis()->SetLabelSize(0.04);
-        h_bal->GetYaxis()->SetLabelSize(0.04);
+        StyleAxes(h_bal, 1.40);
         h_bal->SetTitle("");
         const double meanData = h_bal->GetMean();
 
@@ -339,9 +341,9 @@ void plotresponse_L3(TString inputFile = "",
           h_bal_norm->SetLineColor(kRed + 1);
           h_bal_norm->SetMarkerColor(kRed + 1);
           h_bal_norm->SetLineWidth(2);
-          h_bal_norm->GetXaxis()->SetTitle("p_{T}^{jet} / p_{T}^{#gamma}");
-          h_bal_norm->GetYaxis()->SetTitle("Norm. Events");
-          h_bal_norm->GetYaxis()->SetTitleOffset(1.45);
+          h_bal_norm->GetXaxis()->SetTitle("B_{#gamma+jet}");
+          h_bal_norm->GetYaxis()->SetTitle("1/N dN/dB_{#gamma+jet}");
+          StyleAxes(h_bal_norm, 1.40);
           h_bal_norm->Draw("E");
 
           h_bal_mc_norm->SetLineColor(kBlue + 1);

@@ -1,3 +1,6 @@
+#ifndef L3RESIDUAL_CMS_LUMI_SOURCE
+#define L3RESIDUAL_CMS_LUMI_SOURCE
+
 #include "CMS_lumi.h"
 #include <iostream>
 
@@ -140,3 +143,5 @@ void CMS_lumi(TPad* pad, int iPeriod, int iPosX) {
   }
   return;
 }
+
+#endif

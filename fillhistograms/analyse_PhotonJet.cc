@@ -32,11 +32,6 @@ using std::endl;
 R__LOAD_LIBRARY(histograms_C.so)
 R__LOAD_LIBRARY(eventhistograms_C.so)
 
-#include "JetMETCorrections/Modules/interface/JetResolution.h"
-JME::JetResolution *_jer(0);
-JME::JetResolutionScaleFactor *_jer_sf(0);
-float rho = 0.;
-
 std::mt19937 _mersennetwister;
 std::uint32_t _seed = 4;
 //_seed = 4;
@@ -929,6 +924,12 @@ void analyse_PhotonJet(string input = "PHOTONHP",
                 h->photonjet_balance3Dabseta->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
                 h->photonjet_balance3Dabsetawide->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
                 h->photonjet_balance3Dabsetanarrow->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3D_jetpt) h->photonjet_balance3D_jetpt->Fill(jet_pt, jet_eta, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dwide_jetpt) h->photonjet_balance3Dwide_jetpt->Fill(jet_pt, jet_eta, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dnarrow_jetpt) h->photonjet_balance3Dnarrow_jetpt->Fill(jet_pt, jet_eta, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dabseta_jetpt) h->photonjet_balance3Dabseta_jetpt->Fill(jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dabsetawide_jetpt) h->photonjet_balance3Dabsetawide_jetpt->Fill(jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dabsetanarrow_jetpt) h->photonjet_balance3Dabsetanarrow_jetpt->Fill(jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
                 
                 // Fill counts histograms (UNWEIGHTED - just count entries)
                 if (h->photonjet_balance3D_counts) h->photonjet_balance3D_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
