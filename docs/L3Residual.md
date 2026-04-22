@@ -16,7 +16,7 @@ This page documents the active photon+jet L3 residual workflow. The split fit/ex
 | Histogram filling | [analyse_PhotonJet.cc](../fillhistograms/analyse_PhotonJet.cc) | photon+jet trees and event filters | `photonjet_balance3D*`, `photonjet_balance3D*_counts`, `photonjet_balance_dist` |
 | Derivation | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C) | MC and data `photonjet_balance3D*` histograms | `ratio_vsptref_alphaN`, `ratio_norm_vsptref_alphaN`, `ratio_vsjetpt_alphaN`, `L3Res_vsa*`, `balance3D_mc`, `balance3D_data` |
 | Shared pTref fit | [L3Res.C](../L3Residual/L3Res.C) | one or more derived ROOT files, explicit sample list, fit windows | per-input alpha diagnostics, `kFSR`, `corr_vsptref`, `corr_vsjetpt`, combined sequential pTref fit, combined direct JetPt graph, fit ROOT file, validation plots |
-| Text export | [createL2L3ResTextFile.C](../L3Residual/createL2L3ResTextFile.C) | fit ROOT file from `L3Res.C`, L2Residual text payload | local L3 text file, exported L3 text file, combined L2L3 text file, shared pTref export plot, shared JetPt export plot |
+| Text export | [createL2L3ResTextFile.C](../L3Residual/createL2L3ResTextFile.C) | fit ROOT file from `L3Res.C`, L2Residual text payload | local L3 text file, exported L3 text file, combined L2L3 text file, shared full pTref export plot |
 
 ## Macro signatures
 
@@ -84,10 +84,9 @@ void createL2L3ResTextFile(TString fitRootFile = "L3Residual/L3Res_photonjet/L3R
 
 Purpose:
 
-- refit the shared `pTref` response with the template export function
-- fit one global JetPt-based L3 response from the combined direct JetPt graph stored by `L3Res.C`
+- reuse the stored full direct `pTref` final fit when available, or refit the shared `pTref` graph with the same full model for backward compatibility
 - clone each eta row from the input L2Residual text payload
-- append the same global JetPt L3 correction block to every cloned row
+- append the same global direct-`pTref` L3 correction block to every cloned row
 - write the standalone L3 text file and the combined L2L3 text file
 
 ## Minimal workflow
@@ -149,7 +148,8 @@ All `pTref` binning comes directly from the input histogram axis. The eta output
 3. log-linear + `1/x`
 4. quadratic in `log10(0.01*x)`
 5. quadratic + `1/x`
-6. final exported reference fit: log-linear + `1/x`
+6. final exported reference fit: full direct `pTref` L3 model
+    `1./([0]+[1]/x+[2]*log(x)/x+[3]*(pow(x/[4],[5])-1)/(pow(x/[4],[5])+1)+[6]*pow(x,-0.3051)+[7]*x)`
 
 Only the final shared fit is shown in the main pTref summary plot. The per-input alpha fits and `kFSR` summaries are written under:
 
@@ -160,13 +160,13 @@ Only the final shared fit is shown in the main pTref summary plot. The per-input
 
 ### Text export
 
-`createL2L3ResTextFile.C` keeps the L2 text payload as the reference row layout and writes one global JetPt-based L3Residual function for the full sample. The same fitted L3 block is repeated for every eta row so the combined file has the form
+`createL2L3ResTextFile.C` keeps the L2 text payload as the reference row layout and writes one global direct-`pTref` L3Residual function for the full sample. The same fitted L3 block is repeated for every eta row so the combined file has the form
 
 ```text
-L2Residual(eta, JetPt) * L3Residual(JetPt)
+L2Residual(eta, JetPt) * L3Residual(pTref-derived global fit)
 ```
 
-The pTref fit is still used as a diagnostic export view, but the final text payload is anchored to the direct JetPt response stored upstream by `deriveL3_from_photonjet.C` and collected by `L3Res.C`. The output folder contains:
+The final text payload is anchored to the direct global `pTref` fit stored upstream by `L3Res.C`; no JetPt remap or second JetPt fit is applied in the active path. Each exported row uses the intersection of the chosen fit window and the source L2 payload validity range. The output folder contains:
 
 - `<outfilename>.txt`: local standalone L3 payload
 - `L3Residuals_<runLabel>_<tag>_AK4PF.txt`: exported standalone L3 payload
@@ -178,10 +178,9 @@ The export validation plots are written in:
 <outBaseDir>/<outfilename>/pdf/
 ```
 
-The two key export figures are:
+The key export figure is:
 
-- `L3Res_<runLabel>_ptref_export_fit.png`: the shared pTref response points and the template-style pTref export fit. This is a consistency view of the original alpha-corrected quantity `R_{L3} = B^{Data}/B^{MC}` as a function of the reference-object pT.
-- `L3Res_<runLabel>_jetpt_export_fit.png`: the combined direct JetPt response points and the single JetPt fit that is actually written to the final text payloads. The markers are the alpha-corrected direct JetPt response values aggregated over all inputs, and the red curve is the exported global L3Residual response function used in every text row.
+- `L3Res_<runLabel>_ptref_export_fit.png`: the shared `pTref` response points and the full direct `pTref` export fit that is written to the final text payloads.
 
 ## Raw-distribution checks
 

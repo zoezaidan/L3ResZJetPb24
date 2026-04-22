@@ -65,7 +65,8 @@ void plotresponse_L3(TString inputFile = "",
                      bool isMC = false,
                      TString mcFile = "",
                      TString runLabel = "2024ppRef",
-                     TString lumiLabel = "pp 480.4 pb^{-1}") {
+                     TString lumiLabel = "pp 480.4 pb^{-1}",
+                     TString outputDir = "") {
   
   if (inputFile.IsNull()) {
     cout << "ERROR: No input file specified!" << endl;
@@ -106,7 +107,7 @@ void plotresponse_L3(TString inputFile = "",
   cout << "============================================" << endl;
   
   // Create output directory
-  string outfolder = Form("L3plots_%s", tag.Data());
+  string outfolder = outputDir.IsNull() ? Form("L3plots_%s", tag.Data()) : Form("%s/%s", outputDir.Data(), tag.Data());
   gSystem->mkdir(outfolder.c_str(), kTRUE);
   
   // Access histograms - navigate to hibin and eta directories

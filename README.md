@@ -78,13 +78,13 @@ root -l -b -q 'L3Residual/L3Res.C("L3Residual/L3_derived_photonjet.root","photon
 root -l -b -q 'L3Residual/createL2L3ResTextFile.C("L3Residual/L3Res_photonjet/L3Res_photonjet_fit.root","fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt")'
 ```
 
-The final text export keeps the input L2Residual rows intact and appends one global JetPt-based L3Residual function to every row. In other words, the combined payload is written in the same text-file style as the production JEC examples:
+The final text export keeps the input L2Residual rows intact and appends one global direct-pTref L3Residual function to every row. In other words, the combined payload is written in the same text-file style as the production JEC examples:
 
 ```text
-L2Residual(eta, JetPt) * L3Residual(JetPt)
+L2Residual(eta, JetPt) * L3Residual(pTref-derived global fit)
 ```
 
-The exported JetPt fit is shown in `L3Res_<runLabel>_jetpt_export_fit.png`; that is the function written to the final text files.
+The exported direct-pTref fit is shown in `L3Res_<runLabel>_ptref_export_fit.png`; that is the function written to the final text files.
 
 For a combined photon+jet and Z+jet fit, pass matching sample and fit-window lists:
 

@@ -7,20 +7,15 @@
 // This wrapper is optional: users can call the split macros directly, but it
 // keeps one macro entry point for the full fit-plus-export chain.
 
-#include "TROOT.h"
 #include "TString.h"
 
 #include <iostream>
 #include <string>
 
-using namespace std;
+#include "L3Res.C"
+#include "createL2L3ResTextFile.C"
 
-static TString escapeRootString(const TString& value) {
-  TString escaped = value;
-  escaped.ReplaceAll("\\", "\\\\");
-  escaped.ReplaceAll("\"", "\\\"");
-  return escaped;
-}
+using namespace std;
 
 void dofits_L3(TString inFileL3Derived = "L3_derived.root",
                TString sampleTypesCSV = "photonjet",
@@ -33,30 +28,27 @@ void dofits_L3(TString inFileL3Derived = "L3_derived.root",
                double fitAlphaMax = 0.4,
                string l2ResidualFile = "fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt",
                string outBaseDir = "L3Residual") {
+  string normalizedBaseDir = outBaseDir;
+  if (!normalizedBaseDir.empty() && normalizedBaseDir[0] != '/' && normalizedBaseDir[0] != '.') {
+    normalizedBaseDir = "./" + normalizedBaseDir;
+  }
 
-  gROOT->LoadMacro("L3Residual/L3Res.C");
-  gROOT->LoadMacro("L3Residual/createL2L3ResTextFile.C");
-
-  const TString fitCommand = Form("L3Res(\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d,%.17g,%.17g,\"%s\")",
-                                  escapeRootString(inFileL3Derived).Data(),
-                                  escapeRootString(sampleTypesCSV).Data(),
-                                  escapeRootString(inputPtRangesCSV).Data(),
-                                  escapeRootString(outfilename.c_str()).Data(),
-                                  escapeRootString(runLabel.c_str()).Data(),
-                                  escapeRootString(lumiLabel.c_str()).Data(),
-                                  refAlphaBin,
-                                  fitAlphaMin,
-                                  fitAlphaMax,
-                                  escapeRootString(outBaseDir.c_str()).Data());
-  gROOT->ProcessLine(fitCommand);
+  L3Res(inFileL3Derived,
+        sampleTypesCSV,
+        inputPtRangesCSV,
+        outfilename,
+        runLabel,
+        lumiLabel,
+        refAlphaBin,
+        fitAlphaMin,
+        fitAlphaMax,
+        normalizedBaseDir);
 
   if (l2ResidualFile.empty()) {
     cout << "ERROR: The split export step requires an L2Residual text file." << endl;
     return;
   }
 
-  const TString exportCommand = Form("createL2L3ResTextFile(\"%s\",\"%s\")",
-                                     escapeRootString(Form("%s/%s/%s_fit.root", outBaseDir.c_str(), outfilename.c_str(), outfilename.c_str())).Data(),
-                                     escapeRootString(l2ResidualFile.c_str()).Data());
-  gROOT->ProcessLine(exportCommand);
+  const TString fitRootPath = Form("%s/%s/%s_fit.root", normalizedBaseDir.c_str(), outfilename.c_str(), outfilename.c_str());
+  createL2L3ResTextFile(fitRootPath, l2ResidualFile);
 }
