@@ -36,6 +36,144 @@
 
 #include "../fillhistograms/histograms.h"
 
+namespace {
+
+struct CollapsedProfileStats {
+  double mean = 0.;
+  double error = 0.;
+  double sumWeights = 0.;
+  bool valid = false;
+};
+
+CollapsedProfileStats collapseProfileAcrossEta(TProfile3D* profile, int xbin, int alphaBin) {
+  CollapsedProfileStats stats;
+  if (!profile) {
+    return stats;
+  }
+
+  double weightedSum = 0.;
+  double weightedErrorSquared = 0.;
+  const int nEtaBins = profile->GetYaxis()->GetNbins();
+
+  for (int etabin = 1; etabin <= nEtaBins; ++etabin) {
+    const int globalBin = profile->GetBin(xbin, etabin, alphaBin);
+    const double value = profile->GetBinContent(xbin, etabin, alphaBin);
+    const double error = profile->GetBinError(xbin, etabin, alphaBin);
+    const double weight = profile->GetBinEntries(globalBin);
+
+    if (weight <= 0 || TMath::IsNaN(value) || value <= 0) {
+      continue;
+    }
+
+    const double safeError = TMath::IsNaN(error) ? 0. : error;
+    weightedSum += weight * value;
+    weightedErrorSquared += weight * weight * safeError * safeError;
+    stats.sumWeights += weight;
+  }
+
+  if (stats.sumWeights > 0) {
+    stats.mean = weightedSum / stats.sumWeights;
+    stats.error = sqrt(weightedErrorSquared) / stats.sumWeights;
+    stats.valid = true;
+  }
+
+  return stats;
+}
+
+void sanitizeRatioHistogram(TH1D* ratioHist,
+                           const TH1D* numeratorHist,
+                           const TH1D* denominatorHist,
+                           double defaultValue = 1.0) {
+  if (!ratioHist || !numeratorHist || !denominatorHist) {
+    return;
+  }
+
+  for (int bin = 1; bin <= ratioHist->GetNbinsX(); ++bin) {
+    const double numerator = numeratorHist->GetBinContent(bin);
+    const double denominator = denominatorHist->GetBinContent(bin);
+    if (TMath::IsNaN(numerator) || TMath::IsNaN(denominator) || !(numerator > 0.0) || !(denominator > 0.0)) {
+      ratioHist->SetBinContent(bin, defaultValue);
+      ratioHist->SetBinError(bin, 0.0);
+    }
+  }
+}
+
+// ROOT stores the uncertainty of each ratio histogram bin, but it does not
+// know the covariance between different cumulative-alpha histograms. For the
+// alpha normalization we therefore propagate numerator and denominator errors
+// assuming independence, which is conservative for these shared-event bins.
+// The reference series is an identity by construction, so its error is 0.
+void normalizeHistogramByReferenceHistogram(TH1D* hist,
+                                           const TH1D* referenceHist,
+                                           bool isReferenceSeries) {
+  if (!hist || !referenceHist) {
+    return;
+  }
+
+  for (int bin = 1; bin <= hist->GetNbinsX(); ++bin) {
+    const double value = hist->GetBinContent(bin);
+    const double error = hist->GetBinError(bin);
+    const double referenceValue = referenceHist->GetBinContent(bin);
+    const double referenceError = referenceHist->GetBinError(bin);
+
+    if (TMath::IsNaN(value) || TMath::IsNaN(referenceValue) || !(referenceValue > 0.0) || !(value > 0.0)) {
+      hist->SetBinContent(bin, 0.0);
+      hist->SetBinError(bin, 0.0);
+      continue;
+    }
+
+    if (isReferenceSeries) {
+      hist->SetBinContent(bin, 1.0);
+      hist->SetBinError(bin, 0.0);
+      continue;
+    }
+
+    const double normalizedValue = value / referenceValue;
+    const double relativeError = sqrt(pow(error / value, 2) + pow(referenceError / referenceValue, 2));
+    hist->SetBinContent(bin, normalizedValue);
+    hist->SetBinError(bin, normalizedValue * relativeError);
+  }
+}
+
+void normalizeHistogramByReferenceBin(TH1D* hist, int referenceBin) {
+  if (!hist || referenceBin < 1 || referenceBin > hist->GetNbinsX()) {
+    return;
+  }
+
+  const double referenceValue = hist->GetBinContent(referenceBin);
+  const double referenceError = hist->GetBinError(referenceBin);
+  if (TMath::IsNaN(referenceValue) || !(referenceValue > 0.0)) {
+    for (int bin = 1; bin <= hist->GetNbinsX(); ++bin) {
+      hist->SetBinContent(bin, 0.0);
+      hist->SetBinError(bin, 0.0);
+    }
+    return;
+  }
+
+  for (int bin = 1; bin <= hist->GetNbinsX(); ++bin) {
+    const double value = hist->GetBinContent(bin);
+    const double error = hist->GetBinError(bin);
+    if (TMath::IsNaN(value) || !(value > 0.0)) {
+      hist->SetBinContent(bin, 0.0);
+      hist->SetBinError(bin, 0.0);
+      continue;
+    }
+
+    if (bin == referenceBin) {
+      hist->SetBinContent(bin, 1.0);
+      hist->SetBinError(bin, 0.0);
+      continue;
+    }
+
+    const double normalizedValue = value / referenceValue;
+    const double relativeError = sqrt(pow(error / value, 2) + pow(referenceError / referenceValue, 2));
+    hist->SetBinContent(bin, normalizedValue);
+    hist->SetBinError(bin, normalizedValue * relativeError);
+  }
+}
+
+}  // namespace
+
 void deriveL3_from_photonjet(
   TString mcFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONMC_AK4_photonjet.root",
   TString dataFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONHP_AK4_photonjet.root",
@@ -218,23 +356,7 @@ void deriveL3_from_photonjet(
     // createL2L3ResTextFile.C later exports the final correction text.
     TH1D* l3res_eta = (TH1D*)balance_eta_data->Clone(Form("l3res_pt%s_%s", ptstr.c_str(), alphastr.c_str()));
     l3res_eta->Divide(balance_eta_mc);
-
-    // Propagate errors properly
-    for (int bin = 1; bin <= l3res_eta->GetXaxis()->GetNbins(); ++bin) {
-      double mc_val = balance_eta_mc->GetBinContent(bin);
-      double mc_err = balance_eta_mc->GetBinError(bin);
-      double dt_val = balance_eta_data->GetBinContent(bin);
-      double dt_err = balance_eta_data->GetBinError(bin);
-
-      if (dt_val > 0 && mc_val > 0) {
-        double ratio = dt_val / mc_val;
-        double rel_err = sqrt(pow(mc_err/mc_val, 2) + pow(dt_err/dt_val, 2));
-        l3res_eta->SetBinError(bin, ratio * rel_err);
-      } else {
-        l3res_eta->SetBinContent(bin, 1.0);
-        l3res_eta->SetBinError(bin, 0.0);
-      }
-    }
+    sanitizeRatioHistogram(l3res_eta, balance_eta_data, balance_eta_mc);
 
     // Store for later use
     responses[Form("mc_pt%s_%s", ptstr.c_str(), alphastr.c_str())] = balance_eta_mc;
@@ -285,15 +407,7 @@ void deriveL3_from_photonjet(
 
       // Normalize to the chosen alpha bin value
       TH1D* vsalpha_norm = (TH1D*)vsalpha_ratio->Clone(Form("L3Res_vsa_norm_%d_%d", ptbin, etabin));
-      double norm = respETA[ptbin]->GetBinContent(etabin);
-      if (norm > 0) {
-        for (int bin = 1; bin <= vsalpha_norm->GetXaxis()->GetNbins(); ++bin) {
-          double val = vsalpha_norm->GetBinContent(bin);
-          double err = vsalpha_norm->GetBinError(bin);
-          vsalpha_norm->SetBinContent(bin, val / norm);
-          vsalpha_norm->SetBinError(bin, err / norm);
-        }
-      }
+      normalizeHistogramByReferenceBin(vsalpha_norm, refAlphaBin);
       vsalpha_norm->Write();
     }
   }
@@ -346,39 +460,16 @@ void deriveL3_from_photonjet(
     // Collapse over eta bins, reading from alphaCutBin directly (cumulative fill)
     // With cumulative filling, bin N already represents "alpha < threshold_N"
     for (int ptbin = 1; ptbin <= nPtBins; ++ptbin) {
-      double sum_mc = 0., sum_mc_entries = 0.;
-      double sum_data = 0., sum_data_entries = 0.;
+      const CollapsedProfileStats mcStats = collapseProfileAcrossEta(mc3d[etabins[i].c_str()], ptbin, alphaCutBin);
+      const CollapsedProfileStats dataStats = collapseProfileAcrossEta(data3d[etabins[i].c_str()], ptbin, alphaCutBin);
 
-      for (int etabin = 1; etabin <= nEtaBins; ++etabin) {
-        // Read directly from alphaCutBin (cumulative fill, no need to sum)
-        double val_mc = mc3d[etabins[i].c_str()]->GetBinContent(ptbin, etabin, alphaCutBin);
-        double entries_mc = mc3d[etabins[i].c_str()]->GetBinEntries(
-            mc3d[etabins[i].c_str()]->GetBin(ptbin, etabin, alphaCutBin));
-        double val_data = data3d[etabins[i].c_str()]->GetBinContent(ptbin, etabin, alphaCutBin);
-        double entries_data = data3d[etabins[i].c_str()]->GetBinEntries(
-            data3d[etabins[i].c_str()]->GetBin(ptbin, etabin, alphaCutBin));
-
-        if (val_mc > 0 && entries_mc > 0 && !TMath::IsNaN(val_mc)) {
-          sum_mc += val_mc * entries_mc;
-          sum_mc_entries += entries_mc;
-        }
-        if (val_data > 0 && entries_data > 0 && !TMath::IsNaN(val_data)) {
-          sum_data += val_data * entries_data;
-          sum_data_entries += entries_data;
-        }
+      if (mcStats.valid) {
+        h_mc->SetBinContent(ptbin, mcStats.mean);
+        h_mc->SetBinError(ptbin, mcStats.error);
       }
-
-      if (sum_mc_entries > 0) {
-        double avg_mc = sum_mc / sum_mc_entries;
-        double err_mc = avg_mc / sqrt(sum_mc_entries);  // Statistical error estimate
-        h_mc->SetBinContent(ptbin, avg_mc);
-        h_mc->SetBinError(ptbin, err_mc);
-      }
-      if (sum_data_entries > 0) {
-        double avg_data = sum_data / sum_data_entries;
-        double err_data = avg_data / sqrt(sum_data_entries);  // Statistical error estimate
-        h_data->SetBinContent(ptbin, avg_data);
-        h_data->SetBinError(ptbin, err_data);
+      if (dataStats.valid) {
+        h_data->SetBinContent(ptbin, dataStats.mean);
+        h_data->SetBinError(ptbin, dataStats.error);
       }
     }
 
@@ -394,23 +485,7 @@ void deriveL3_from_photonjet(
     h_ratio->SetTitle(Form("Balance Ratio (Data/MC) vs p_{T}^{ref} (#alpha < %.2f)", alpha_cut));
     h_ratio->SetLineColor(kBlack);
     h_ratio->SetMarkerColor(kBlack);
-
-    // Propagate errors
-    for (int bin = 1; bin <= h_ratio->GetXaxis()->GetNbins(); ++bin) {
-      double mc_val = h_mc->GetBinContent(bin);
-      double mc_err = h_mc->GetBinError(bin);
-      double dt_val = h_data->GetBinContent(bin);
-      double dt_err = h_data->GetBinError(bin);
-
-      if (dt_val > 0 && mc_val > 0) {
-        double ratio = dt_val / mc_val;
-        double rel_err = sqrt(pow(mc_err/mc_val, 2) + pow(dt_err/dt_val, 2));
-        h_ratio->SetBinError(bin, ratio * rel_err);
-      } else {
-        h_ratio->SetBinContent(bin, 1.0);
-        h_ratio->SetBinError(bin, 0.0);
-      }
-    }
+    sanitizeRatioHistogram(h_ratio, h_data, h_mc);
 
     ratio_vsptref[alphaCutBin] = h_ratio;
     h_ratio->Write();
@@ -435,24 +510,7 @@ void deriveL3_from_photonjet(
           Form("ratio_norm_vsptref_alpha%d", alphaCutBin));
         h_ratio_norm->SetTitle(Form("Normalized Ratio vs p_{T}^{ref} (#alpha < %.2f / ref #alpha < %.2f)", 
                                    alpha_cut, alphaCutValue));
-      
-      // Divide by reference
-      for (int bin = 1; bin <= h_ratio_norm->GetXaxis()->GetNbins(); ++bin) {
-        double val = h_ratio_norm->GetBinContent(bin);
-        double err = h_ratio_norm->GetBinError(bin);
-        double ref_val = ratio_ref->GetBinContent(bin);
-        double ref_err = ratio_ref->GetBinError(bin);
-        
-        if (ref_val > 0 && val > 0) {
-          double norm_val = val / ref_val;
-          double rel_err = sqrt(pow(err/val, 2) + pow(ref_err/ref_val, 2));
-          h_ratio_norm->SetBinContent(bin, norm_val);
-          h_ratio_norm->SetBinError(bin, norm_val * rel_err);
-        } else {
-          h_ratio_norm->SetBinContent(bin, 0);
-          h_ratio_norm->SetBinError(bin, 0);
-        }
-      }
+      normalizeHistogramByReferenceHistogram(h_ratio_norm, ratio_ref, alphaCutBin == refAlphaBin);
       
       h_ratio_norm->Write();
       
@@ -480,6 +538,7 @@ void deriveL3_from_photonjet(
   map<int, TH1D*> balance_vsjetpt_mc;
   map<int, TH1D*> balance_vsjetpt_data;
   map<int, TH1D*> ratio_vsjetpt;
+  TH1D* ratio_ref_jetpt = nullptr;
 
   for (int alphaCutBin = 1; alphaCutBin <= nAlphaBins; ++alphaCutBin) {
     // Cumulative alpha cut: alpha < upper edge of this bin
@@ -504,41 +563,17 @@ void deriveL3_from_photonjet(
     h_data->SetMarkerColor(kRed);
 
     for (int ptbin = 1; ptbin <= nJetPtBins; ++ptbin) {
-      double sum_mc = 0., sum_mc_entries = 0.;
-      double sum_data = 0., sum_data_entries = 0.;
+      const CollapsedProfileStats mcStats = collapseProfileAcrossEta(jetpt_mc3d, ptbin, alphaCutBin);
+      const CollapsedProfileStats dataStats = collapseProfileAcrossEta(jetpt_data3d, ptbin, alphaCutBin);
 
-      for (int etabin = 1; etabin <= nEtaBins; ++etabin) {
-        double val_mc = jetpt_mc3d->GetBinContent(ptbin, etabin, alphaCutBin);
-        double entries_mc = jetpt_mc3d->GetBinEntries(
-            jetpt_mc3d->GetBin(ptbin, etabin, alphaCutBin));
-        double val_data = jetpt_data3d->GetBinContent(ptbin, etabin, alphaCutBin);
-        double entries_data = jetpt_data3d->GetBinEntries(
-            jetpt_data3d->GetBin(ptbin, etabin, alphaCutBin));
-
-        if (val_mc > 0 && entries_mc > 0 && !TMath::IsNaN(val_mc)) {
-          sum_mc += val_mc * entries_mc;
-          sum_mc_entries += entries_mc;
-        }
-        if (val_data > 0 && entries_data > 0 && !TMath::IsNaN(val_data)) {
-          sum_data += val_data * entries_data;
-          sum_data_entries += entries_data;
-        }
+      if (mcStats.valid) {
+        h_mc->SetBinContent(ptbin, mcStats.mean);
+        h_mc->SetBinError(ptbin, mcStats.error);
       }
 
-      if (sum_mc_entries > 0) {
-        double avg_balance_mc = sum_mc / sum_mc_entries;
-        double err_mc = avg_balance_mc / sqrt(sum_mc_entries);
-
-        h_mc->SetBinContent(ptbin, avg_balance_mc);
-        h_mc->SetBinError(ptbin, err_mc);
-      }
-
-      if (sum_data_entries > 0) {
-        double avg_balance_data = sum_data / sum_data_entries;
-        double err_data = avg_balance_data / sqrt(sum_data_entries);
-
-        h_data->SetBinContent(ptbin, avg_balance_data);
-        h_data->SetBinError(ptbin, err_data);
+      if (dataStats.valid) {
+        h_data->SetBinContent(ptbin, dataStats.mean);
+        h_data->SetBinError(ptbin, dataStats.error);
       }
     }
 
@@ -554,26 +589,23 @@ void deriveL3_from_photonjet(
     h_ratio->SetTitle(Form("Balance Ratio (Data/MC) vs %s (#alpha < %.2f)", jetPtDescriptor.Data(), alpha_cut));
     h_ratio->SetLineColor(kBlack);
     h_ratio->SetMarkerColor(kBlack);
-
-    // Propagate errors
-    for (int bin = 1; bin <= h_ratio->GetXaxis()->GetNbins(); ++bin) {
-      double mc_val = h_mc->GetBinContent(bin);
-      double mc_err = h_mc->GetBinError(bin);
-      double dt_val = h_data->GetBinContent(bin);
-      double dt_err = h_data->GetBinError(bin);
-
-      if (dt_val > 0 && mc_val > 0) {
-        double ratio = dt_val / mc_val;
-        double rel_err = sqrt(pow(mc_err/mc_val, 2) + pow(dt_err/dt_val, 2));
-        h_ratio->SetBinError(bin, ratio * rel_err);
-      } else {
-        h_ratio->SetBinContent(bin, 1.0);
-        h_ratio->SetBinError(bin, 0.0);
-      }
-    }
+    sanitizeRatioHistogram(h_ratio, h_data, h_mc);
 
     ratio_vsjetpt[alphaCutBin] = h_ratio;
     h_ratio->Write();
+    if (alphaCutBin == refAlphaBin) {
+      ratio_ref_jetpt = (TH1D*)h_ratio->Clone("ratio_ref_vsjetpt");
+      ratio_ref_jetpt->Write();
+    }
+  }
+
+  if (ratio_ref_jetpt) {
+    for (int alphaCutBin = 1; alphaCutBin <= nAlphaBins; ++alphaCutBin) {
+      TH1D* h_ratio_norm = (TH1D*)ratio_vsjetpt[alphaCutBin]->Clone(
+        Form("ratio_norm_vsjetpt_alpha%d", alphaCutBin));
+      normalizeHistogramByReferenceHistogram(h_ratio_norm, ratio_ref_jetpt, alphaCutBin == refAlphaBin);
+      h_ratio_norm->Write();
+    }
   }
 
   // NOTE: This macro does not write a JEC text file.

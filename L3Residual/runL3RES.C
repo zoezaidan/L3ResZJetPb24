@@ -12,7 +12,8 @@
 
 #include "deriveL3_from_photonjet.C"
 #include "plotresponse_L3.C"
-#include "dofits_L3.C"
+#include "L3Res.C"
+#include "createL2L3ResTextFile.C"
 
 #include "TString.h"
 #include "TSystem.h"
@@ -35,14 +36,19 @@ void runL3RES(
   string runLabel = "2024ppRef",
   string lumiLabel = "pp 480.4 pb^{-1}") {
 
-  const string outTag = "L3_derived_2026_04_21_photonjet_full";
-  const string outBaseDir = "L3Residual";
+  // Make paths absolute to avoid ROOT path resolution issues
+  TString currentDir = gSystem->pwd();
+  const string currentDirStr = string(currentDir.Data());
+
+  const string outTag = "L3_derived_2026_04_22_photonjet_final";
+  const string outBaseDir = currentDirStr + "/L3Residual";
   const string outDir = outBaseDir + "/" + outTag;
   const string plotsDir = outDir + "/plots";
-  const TString derivedFile = Form("%s/%s.root", outDir.c_str(), outTag.c_str());
 
   gSystem->mkdir(outDir.c_str(), kTRUE);
   gSystem->mkdir(plotsDir.c_str(), kTRUE);
+  
+  const TString derivedFile = Form("%s/%s.root", outDir.c_str(), outTag.c_str());
 
   cout << "============================================" << endl;
   cout << "Running centralized L3 workflow" << endl;
@@ -54,26 +60,50 @@ void runL3RES(
 
   if (makeInputPlots) {
     cout << "[1/3] Plotting input photon+jet response distributions" << endl;
-    plotresponse_L3(dataInputFile, "Data_2026_04_21", false, "", runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
-    plotresponse_L3(mcInputFile, "MC_2026_04_21", true, "", runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
-    plotresponse_L3(dataInputFile, "DataVsMC_2026_04_21", false, mcInputFile, runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
+    plotresponse_L3(dataInputFile, "Data", false, "", runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
+    plotresponse_L3(mcInputFile, "MC", true, "", runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
+    plotresponse_L3(dataInputFile, "DataVsMC", false, mcInputFile, runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
   }
 
   cout << "[2/3] Deriving L3 response inputs" << endl;
   deriveL3_from_photonjet(mcInputFile, dataInputFile, derivedFile, refAlphaBin, false, true);
 
   cout << "[3/3] Running L3 fits and text export" << endl;
-  dofits_L3(derivedFile,
-            sampleTypesCSV,
-            inputPtRangesCSV,
-            outTag,
-            runLabel,
-            lumiLabel,
-            refAlphaBin,
-            fitAlphaMin,
-            fitAlphaMax,
-            l2ResidualFile,
-            outBaseDir);
+  L3Res(derivedFile,
+        sampleTypesCSV,
+        inputPtRangesCSV,
+        outTag,
+        runLabel,
+        lumiLabel,
+        refAlphaBin,
+        fitAlphaMin,
+        fitAlphaMax,
+        outBaseDir);
+
+  if (l2ResidualFile.empty()) {
+    cout << "ERROR: The split export step requires an L2Residual text file." << endl;
+    return;
+  }
+
+  string normalizedBaseDir = outBaseDir;
+  if (!normalizedBaseDir.empty() && normalizedBaseDir[0] != '/' && normalizedBaseDir[0] != '.') {
+    normalizedBaseDir = "./" + normalizedBaseDir;
+  }
+
+  TString fitRootPath;
+  if (normalizedBaseDir.empty() || normalizedBaseDir == "." || normalizedBaseDir == "./") {
+    fitRootPath = Form("%s_fit.root", outTag.c_str());
+  } else {
+    fitRootPath = Form("%s/%s/%s_fit.root", normalizedBaseDir.c_str(), outTag.c_str(), outTag.c_str());
+  }
+
+  // Make the path absolute to avoid ROOT path resolution issues
+  if (!fitRootPath.BeginsWith("/")) {
+    fitRootPath = currentDir + "/" + fitRootPath;
+  }
+
+  cout << "INFO: Opening fit ROOT file: " << fitRootPath.Data() << endl;
+  createL2L3ResTextFile(fitRootPath, l2ResidualFile);
 
   cout << "============================================" << endl;
   cout << "L3 workflow finished." << endl;

@@ -49,6 +49,14 @@ void dofits_L3(TString inFileL3Derived = "L3_derived.root",
     return;
   }
 
-  const TString fitRootPath = Form("%s/%s/%s_fit.root", normalizedBaseDir.c_str(), outfilename.c_str(), outfilename.c_str());
+  TString fitRootPath;
+  if (normalizedBaseDir.empty() || normalizedBaseDir == "." || normalizedBaseDir == "./") {
+    fitRootPath = Form("%s_fit.root", outfilename.c_str());
+  } else {
+    fitRootPath = Form("%s/%s/%s_fit.root", normalizedBaseDir.c_str(), outfilename.c_str(), outfilename.c_str());
+  }
+
+  // Require an explicit local path; do not attempt silent fallbacks.
+  cout << "INFO: Opening fit ROOT file: " << fitRootPath.Data() << endl;
   createL2L3ResTextFile(fitRootPath, l2ResidualFile);
 }

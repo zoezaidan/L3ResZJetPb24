@@ -14,7 +14,7 @@ This page documents the active photon+jet L3 residual workflow. The split fit/ex
 | Stage | Macro | Required inputs | Main outputs |
 | --- | --- | --- | --- |
 | Histogram filling | [analyse_PhotonJet.cc](../fillhistograms/analyse_PhotonJet.cc) | photon+jet trees and event filters | `photonjet_balance3D*`, `photonjet_balance3D*_counts`, `photonjet_balance_dist` |
-| Derivation | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C) | MC and data `photonjet_balance3D*` histograms | `ratio_vsptref_alphaN`, `ratio_norm_vsptref_alphaN`, `ratio_vsjetpt_alphaN`, `L3Res_vsa*`, `balance3D_mc`, `balance3D_data` |
+| Derivation | [deriveL3_from_photonjet.C](../L3Residual/deriveL3_from_photonjet.C) | MC and data `photonjet_balance3D*` histograms | `ratio_vsptref_alphaN`, `ratio_norm_vsptref_alphaN`, `ratio_vsjetpt_alphaN`, `ratio_norm_vsjetpt_alphaN`, `L3Res_vsa*`, `balance3D_mc`, `balance3D_data` |
 | Shared pTref fit | [L3Res.C](../L3Residual/L3Res.C) | one or more derived ROOT files, explicit sample list, fit windows | per-input alpha diagnostics, `kFSR`, `corr_vsptref`, `corr_vsjetpt`, combined sequential pTref fit, combined direct JetPt graph, fit ROOT file, validation plots |
 | Text export | [createL2L3ResTextFile.C](../L3Residual/createL2L3ResTextFile.C) | fit ROOT file from `L3Res.C`, L2Residual text payload | local L3 text file, exported L3 text file, combined L2L3 text file, shared full pTref export plot |
 
@@ -42,6 +42,7 @@ Important notes:
 
 - The macro requires the direct JetPt balance profiles already stored by the filler. It does not fall back to a photon-pT-derived approximation.
 - `refAlphaBin` is the cumulative alpha bin used for the eta maps and for the normalized alpha series.
+- Weighted photon+jet profiles must keep the ROOT-stored `TProfile3D` bin errors when collapsing over eta or pT. The macro does not approximate uncertainties with `1/sqrt(entries)`.
 
 ### `L3Res.C`
 
@@ -134,10 +135,13 @@ The derivation stage stores the full alpha series in both `pTref` and JetPt:
 - `ratio_vsptref_alphaN`
 - `ratio_norm_vsptref_alphaN`
 - `ratio_vsjetpt_alphaN`
+- `ratio_norm_vsjetpt_alphaN`
 - `L3Res_vsa_<ptbin>_<etabin>`
 - `L3Res_vsa_norm_<ptbin>_<etabin>`
 
 All `pTref` binning comes directly from the input histogram axis. The eta output histograms use the axis definitions from the loaded balance histogram branch and the repository bin arrays in [fillhistograms/histograms.h](../fillhistograms/histograms.h).
+
+For uncertainty handling, the derivation stage uses the ROOT-provided profile or histogram bin errors wherever those exist. The only manual step is the normalization to the reference alpha bin, because ROOT does not track the covariance between different cumulative-alpha ratio histograms. That normalization therefore uses conservative independent numerator/denominator propagation, and the reference-alpha normalized point is fixed to `1 +/- 0` by identity.
 
 ### Shared pTref fit
 
@@ -150,6 +154,8 @@ All `pTref` binning comes directly from the input histogram axis. The eta output
 5. quadratic + `1/x`
 6. final exported reference fit: full direct `pTref` L3 model
     `1./([0]+[1]/x+[2]*log(x)/x+[3]*(pow(x/[4],[5])-1)/(pow(x/[4],[5])+1)+[6]*pow(x,-0.3051)+[7]*x)`
+
+The alpha extrapolation uses `TGraphErrors`, so the stored `ratio_norm_*` bin errors are used as fit weights. The corrected `corr_vsptref` and `corr_vsjetpt` histograms keep the reference-alpha ratio uncertainty on the final response; the fitted `kFSR` intercept uncertainty is stored separately in `kFSR` and is not multiplied back into `corr_*`, because the normalized alpha-fit points share the same reference denominator and ROOT does not model that covariance.
 
 Only the final shared fit is shown in the main pTref summary plot. The per-input alpha fits and `kFSR` summaries are written under:
 
