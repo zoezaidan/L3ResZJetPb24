@@ -10,10 +10,10 @@
 //   L3Residual/L3_derived_2026_04_21_photonjet_full/
 //   (including plots in /plots subdirectory)
 
-#include "deriveL3_from_photonjet.C"
-#include "plotresponse_L3.C"
 #include "L3Res.C"
 #include "createL2L3ResTextFile.C"
+#include "deriveL3_from_photonjet.C"
+#include "plotresponse_L3.C"
 
 #include "TString.h"
 #include "TSystem.h"
@@ -24,17 +24,18 @@
 using namespace std;
 
 void runL3RES(
-  TString mcInputFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/2026_04_13_QCDPhoton_full.root",
-  TString dataInputFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/2026_04_13_2024ppRefHP_full.root",
-  string l2ResidualFile = "fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt",
-  bool makeInputPlots = true,
-  int refAlphaBin = 5,
-  double fitAlphaMin = 0.0,
-  double fitAlphaMax = 0.4,
-  TString sampleTypesCSV = "photonjet",
-  TString inputPtRangesCSV = "60-300",
-  string runLabel = "2024ppRef",
-  string lumiLabel = "pp 480.4 pb^{-1}") {
+    TString mcInputFile =
+        "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/"
+        "2026_04_13_QCDPhoton_full.root",
+    TString dataInputFile =
+        "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/"
+        "2026_04_13_2024ppRefHP_full.root",
+    string l2ResidualFile =
+        "fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt",
+    bool makeInputPlots = true, int refAlphaBin = 5, double fitAlphaMin = 0.0,
+    double fitAlphaMax = 0.4, TString sampleTypesCSV = "photonjet",
+    TString inputPtRangesCSV = "60-300", string runLabel = "2024ppRef",
+    string lumiLabel = "pp 480.4 pb^{-1}") {
 
   // Make paths absolute to avoid ROOT path resolution issues
   TString currentDir = gSystem->pwd();
@@ -47,8 +48,9 @@ void runL3RES(
 
   gSystem->mkdir(outDir.c_str(), kTRUE);
   gSystem->mkdir(plotsDir.c_str(), kTRUE);
-  
-  const TString derivedFile = Form("%s/%s.root", outDir.c_str(), outTag.c_str());
+
+  const TString derivedFile =
+      Form("%s/%s.root", outDir.c_str(), outTag.c_str());
 
   cout << "============================================" << endl;
   cout << "Running centralized L3 workflow" << endl;
@@ -60,41 +62,41 @@ void runL3RES(
 
   if (makeInputPlots) {
     cout << "[1/3] Plotting input photon+jet response distributions" << endl;
-    plotresponse_L3(dataInputFile, "Data", false, "", runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
-    plotresponse_L3(mcInputFile, "MC", true, "", runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
-    plotresponse_L3(dataInputFile, "DataVsMC", false, mcInputFile, runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
+    plotresponse_L3(dataInputFile, "Data", false, "", runLabel.c_str(),
+                    lumiLabel.c_str(), plotsDir.c_str());
+    plotresponse_L3(mcInputFile, "MC", true, "", runLabel.c_str(),
+                    lumiLabel.c_str(), plotsDir.c_str());
+    plotresponse_L3(dataInputFile, "DataVsMC", false, mcInputFile,
+                    runLabel.c_str(), lumiLabel.c_str(), plotsDir.c_str());
   }
 
   cout << "[2/3] Deriving L3 response inputs" << endl;
-  deriveL3_from_photonjet(mcInputFile, dataInputFile, derivedFile, refAlphaBin, false, true);
+  deriveL3_from_photonjet(mcInputFile, dataInputFile, derivedFile, refAlphaBin,
+                          false, true);
 
   cout << "[3/3] Running L3 fits and text export" << endl;
-  L3Res(derivedFile,
-        sampleTypesCSV,
-        inputPtRangesCSV,
-        outTag,
-        runLabel,
-        lumiLabel,
-        refAlphaBin,
-        fitAlphaMin,
-        fitAlphaMax,
-        outBaseDir);
+  L3Res(derivedFile, sampleTypesCSV, inputPtRangesCSV, outTag, runLabel,
+        lumiLabel, refAlphaBin, fitAlphaMin, fitAlphaMax, outBaseDir);
 
   if (l2ResidualFile.empty()) {
-    cout << "ERROR: The split export step requires an L2Residual text file." << endl;
+    cout << "ERROR: The split export step requires an L2Residual text file."
+         << endl;
     return;
   }
 
   string normalizedBaseDir = outBaseDir;
-  if (!normalizedBaseDir.empty() && normalizedBaseDir[0] != '/' && normalizedBaseDir[0] != '.') {
+  if (!normalizedBaseDir.empty() && normalizedBaseDir[0] != '/' &&
+      normalizedBaseDir[0] != '.') {
     normalizedBaseDir = "./" + normalizedBaseDir;
   }
 
   TString fitRootPath;
-  if (normalizedBaseDir.empty() || normalizedBaseDir == "." || normalizedBaseDir == "./") {
+  if (normalizedBaseDir.empty() || normalizedBaseDir == "." ||
+      normalizedBaseDir == "./") {
     fitRootPath = Form("%s_fit.root", outTag.c_str());
   } else {
-    fitRootPath = Form("%s/%s/%s_fit.root", normalizedBaseDir.c_str(), outTag.c_str(), outTag.c_str());
+    fitRootPath = Form("%s/%s/%s_fit.root", normalizedBaseDir.c_str(),
+                       outTag.c_str(), outTag.c_str());
   }
 
   // Make the path absolute to avoid ROOT path resolution issues

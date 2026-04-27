@@ -23,11 +23,11 @@ using std::endl;
 #include "histograms.h"
 #include "settings.h"
 
+#include "JetCorrector.h"
+#include "chain_builder.h"
 #include "eventhistograms.h"
 #include "helpers.h"
 #include "input_config.h"
-#include "chain_builder.h"
-#include "JetCorrector.h"
 
 R__LOAD_LIBRARY(histograms_C.so)
 R__LOAD_LIBRARY(eventhistograms_C.so)
@@ -40,37 +40,42 @@ bool debug = false;
 bool applyjetvetomap = true;
 
 // Helper function to load pthat weights from file
-std::map<float, double> LoadPthatWeights(const std::string& weightsFile) {
-    std::map<float, double> weights;
-    std::ifstream fin(weightsFile);
-    if (!fin) {
+std::map<float, double> LoadPthatWeights(const std::string &weightsFile) {
+  std::map<float, double> weights;
+  std::ifstream fin(weightsFile);
+  if (!fin) {
     log(LOG_ERROR, "Could not open pthat weights file: " + weightsFile);
-        return weights;
-    }
-    std::string line;
-    while (std::getline(fin, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        std::istringstream iss(line);
-        float bin; double w;
-        if (iss >> bin >> w) {
-            weights[bin] = w;
-        }
-    }
     return weights;
+  }
+  std::string line;
+  while (std::getline(fin, line)) {
+    if (line.empty() || line[0] == '#')
+      continue;
+    std::istringstream iss(line);
+    float bin;
+    double w;
+    if (iss >> bin >> w) {
+      weights[bin] = w;
+    }
+  }
+  return weights;
 }
 
 // Helper function to get the pthat bin for a given value
-float GetPthatBin(float pthat, const std::vector<float>& bins) {
-    float result = bins.front();
-    for (size_t i = 0; i < bins.size(); ++i) {
-        if (pthat >= bins[i]) result = bins[i];
-        else break;
-    }
-    return result;
+float GetPthatBin(float pthat, const std::vector<float> &bins) {
+  float result = bins.front();
+  for (size_t i = 0; i < bins.size(); ++i) {
+    if (pthat >= bins[i])
+      result = bins[i];
+    else
+      break;
+  }
+  return result;
 }
 
 // Photon+Jet analysis for L3 residual corrections
-// jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t" or "ak4PFJetAnalyzerSDZcut1/t"
+// jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t" or
+// "ak4PFJetAnalyzerSDZcut1/t"
 void analyse_PhotonJet(string input = "PHOTONHP",
                        string outputfiletag = "AK4_photonjet",
                        bool isMC = false, bool checkjetid = false,
@@ -138,7 +143,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   string inputName = input;
   // For directory/filelist, use last component of path as name
   // First trim any trailing '/' characters to avoid embedding the full path
-  while (!inputName.empty() && inputName.back() == '/') inputName.pop_back();
+  while (!inputName.empty() && inputName.back() == '/')
+    inputName.pop_back();
   if (inputType != "era") {
     size_t lastSlash = inputName.find_last_of("/");
     if (lastSlash != string::npos && lastSlash < inputName.size() - 1) {
@@ -155,12 +161,11 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
   if (batchIndex >= 0) {
     // For batch mode, use just the outputfiletag (cleaner naming)
-    outputfilename = Form("%s/%s_batch%d_of_%d.root",
-                         config.outputDir.c_str(),
-                         outputfiletag.c_str(), batchIndex, totalBatches);
+    outputfilename = Form("%s/%s_batch%d_of_%d.root", config.outputDir.c_str(),
+                          outputfiletag.c_str(), batchIndex, totalBatches);
   } else {
     outputfilename = Form("%s/%s_%s.root", config.outputDir.c_str(),
-                         inputName.c_str(), outputfiletag.c_str());
+                          inputName.c_str(), outputfiletag.c_str());
   }
   if (debug)
     outputfilename = "test.root";
@@ -180,9 +185,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     log(LOG_ERROR, "No entries found in input");
     return;
   }
-  log(LOG_INFO,
-      "Input chain building complete with " +
-          std::to_string(chains->nEntries) + " entries");
+  log(LOG_INFO, "Input chain building complete with " +
+                    std::to_string(chains->nEntries) + " entries");
 
   auto evtTree = chains->evtChain;
   auto photonTree = chains->photonChain;
@@ -205,9 +209,9 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   std::vector<float> *phoHoverE = 0;
   std::vector<float> *phoSigmaIEtaIEta = 0;
   std::vector<float> *phoR9 = 0;
-  std::vector<float> *pfcIso3subUEec = 0;  // PF charged hadron isolation
-  std::vector<float> *pfnIso3subUEec = 0;  // PF neutral hadron isolation
-  std::vector<float> *pfpIso3subUEec = 0;  // PF photon isolation
+  std::vector<float> *pfcIso3subUEec = 0; // PF charged hadron isolation
+  std::vector<float> *pfnIso3subUEec = 0; // PF neutral hadron isolation
+  std::vector<float> *pfpIso3subUEec = 0; // PF photon isolation
 
   // MC truth matching branches (only used for MC)
   std::vector<int> *mcPID = 0;
@@ -217,8 +221,6 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   std::vector<float> *mcEta = 0;
   std::vector<float> *mcPhi = 0;
   std::vector<int> *pho_genMatchedIndex = 0;
-
-  
 
   // Now enable only the branches we need
   evtTree->SetBranchStatus("*", 0);
@@ -252,7 +254,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   // auto triggerTree = (TTree*)inFile->Get(triggerPath.c_str());
 
   if (!isMC) {
-  //   cout << "Use Photon trigger: HLT_PPRefGEDPhoton30_v6" << endl;
+    //   cout << "Use Photon trigger: HLT_PPRefGEDPhoton30_v6" << endl;
     triggerTree->SetBranchStatus("*", 0);
     triggerTree->SetBranchStatus("HLT_PPRefGEDPhoton30_v6", 1);
     triggerTree->SetBranchAddress("HLT_PPRefGEDPhoton30_v6", &HLT_Photon30);
@@ -291,10 +293,12 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
   jetTree->SetBranchAddress("evt", &evt);
   jetTree->SetBranchAddress("nref", &nref);
-  jetTree->SetBranchAddress("rawpt", &jtpt); // we want uncorrected rawpt, jtpt might have some JEC already applied
+  jetTree->SetBranchAddress("rawpt",
+                            &jtpt); // we want uncorrected rawpt, jtpt might
+                                    // have some JEC already applied
   jetTree->SetBranchAddress("jteta", &jteta);
   jetTree->SetBranchAddress("jtphi", &jtphi);
-  
+
   jetTree->SetBranchStatus("evt", 1);
   jetTree->SetBranchStatus("nref", 1);
   jetTree->SetBranchStatus("rawpt", 1);
@@ -378,17 +382,20 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     photonTree->SetBranchAddress("pho_genMatchedIndex", &pho_genMatchedIndex);
   }
 
-  //TODO: Add electron veto for photons
+  // TODO: Add electron veto for photons
 
-  auto pthatWeights = LoadPthatWeights("jecfiles/2024_PP_30_170_pthat_weights.txt");
+  auto pthatWeights =
+      LoadPthatWeights("jecfiles/2024_PP_30_170_pthat_weights.txt");
   std::vector<float> pthatBins;
-  for (const auto& kv : pthatWeights) pthatBins.push_back(kv.first);
+  for (const auto &kv : pthatWeights)
+    pthatBins.push_back(kv.first);
   std::sort(pthatBins.begin(), pthatBins.end());
   if (isMC && pthatWeights.empty()) {
-    log(LOG_WARNING, "No pthat weights were loaded; MC event weights may be zero");
+    log(LOG_WARNING,
+        "No pthat weights were loaded; MC event weights may be zero");
   } else if (isMC) {
     log(LOG_DEBUG,
-      "Loaded " + std::to_string(pthatWeights.size()) + " pthat bins");
+        "Loaded " + std::to_string(pthatWeights.size()) + " pthat bins");
   }
 
   TFile *outfile = new TFile(outputfilename.c_str(), "RECREATE");
@@ -417,9 +424,11 @@ void analyse_PhotonJet(string input = "PHOTONHP",
           assert(dir2);
           dir2->cd();
 
-          // Use PHOTONJET analysis type - only creates photon+jet specific histograms
-          histograms *h = new histograms(dir2, etaedges[i], etaedges[i + 1],
-                                         hibins[j], hibins[j + 1], isMC, AnalysisType::PHOTONJET);
+          // Use PHOTONJET analysis type - only creates photon+jet specific
+          // histograms
+          histograms *h =
+              new histograms(dir2, etaedges[i], etaedges[i + 1], hibins[j],
+                             hibins[j + 1], isMC, AnalysisType::PHOTONJET);
           _histos[name2.c_str()].push_back(h);
         }
       }
@@ -437,14 +446,14 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 #if REDOJES == 1
   log(LOG_INFO, "Applying MC JEC from file " + jecfile);
   vector<string> JECFiles;
-  // This is MCTruth (L2Relative)  
+  // This is MCTruth (L2Relative)
   JECFiles.push_back(jecfile.c_str());
   // L2 residual for data only
   if (!isMC) {
     log(LOG_INFO, "Applying L2 Residual from file " + l2file);
     JECFiles.push_back(l2file.c_str());
   }
-   
+
   JetCorrector JEC(JECFiles);
   log(LOG_INFO, "Initialised jet corrector inputs");
 #endif
@@ -452,9 +461,10 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   // JER not needed for photon+jet L3 residual analysis
 
   // Jet veto map
-  auto mapfile = new TFile("jecfiles/Summer24Prompt24_RunBCDEFGHI.root","READ"); 
-  auto vetomap = (TH2D*)mapfile->Get("jetvetomap_all");
-  
+  auto mapfile =
+      new TFile("jecfiles/Summer24Prompt24_RunBCDEFGHI.root", "READ");
+  auto vetomap = (TH2D *)mapfile->Get("jetvetomap_all");
+
   // Null check for veto map
   if (applyjetvetomap && (!mapfile || mapfile->IsZombie() || !vetomap)) {
     log(LOG_WARNING, "Veto map unavailable, disabling veto map selection");
@@ -473,44 +483,46 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
   log(LOG_INFO, "Processing " + std::to_string(nentries) + " events");
   for (Long64_t i = 0; i < nentries; ++i) {
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
-                         std::to_string(nentries) + ": reading event tree");
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
+                       std::to_string(nentries) + ": reading event tree");
 
     evtTree->GetEntry(i);
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
-                         std::to_string(nentries) + ": reading trigger tree");
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
+                       std::to_string(nentries) + ": reading trigger tree");
 
     triggerTree->GetEntry(i);
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
-                         std::to_string(nentries) + ": reading photon tree");
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
+                       std::to_string(nentries) + ": reading photon tree");
 
     photonTree->GetEntry(i);
     log_progress_every(i + 1, nentries, 1000, LOG_INFO);
 
     // Photon trigger logic
-     if (!isMC) {
-       trigger = HLT_Photon30;
-     }
-     if (isMC) trigger = true; // MC: no trigger requirement
+    if (!isMC) {
+      trigger = HLT_Photon30;
+    }
+    if (isMC)
+      trigger = true; // MC: no trigger requirement
 
-     if (!trigger) continue;
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": passed trigger selection");
-
+    if (!trigger)
+      continue;
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": passed trigger selection");
 
     auto get_weight = [pthatWeights, pthatBins](float pthat) {
-        float bin = GetPthatBin(pthat, pthatBins);
-        auto it = pthatWeights.find(bin);
-        if (it != pthatWeights.end()) return static_cast<float>(it->second);
-        return 0.f;
+      float bin = GetPthatBin(pthat, pthatBins);
+      auto it = pthatWeights.find(bin);
+      if (it != pthatWeights.end())
+        return static_cast<float>(it->second);
+      return 0.f;
     };
 
     evtwt = 1;
     if (isMC) {
-      evtwt *= weight*get_weight(pthat);
+      evtwt *= weight * get_weight(pthat);
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) +
-                         ": computed event weight = " + std::to_string(evtwt));
-
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) +
+                       ": computed event weight = " + std::to_string(evtwt));
 
     // cout << weight << " " << evtwt << endl;
 
@@ -519,7 +531,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     //    skimTree->GetEntry(i);
     //    if (pprimaryVertexFilter != 1) continue;
     //  }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": reading jet tree");
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": reading jet tree");
 
     jetTree->GetEntry(i);
 
@@ -536,9 +548,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     if (jtpt[0] < jtptmin) {
       continue;
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) +
-                         ": passed basic photon and jet multiplicity selection");
-
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) +
+                       ": passed basic photon and jet multiplicity selection");
 
     eh->event_vz->Fill(vz, evtwt);
     if (isMC)
@@ -567,8 +578,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         // 170-1000 < 1.93
       }
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": evaluated valid jet range");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": evaluated valid jet range");
 
     // JET ID - this is 2023 AK4CHS jet selection 12/2024
     // fill passjteta for all jets in the event?
@@ -614,8 +625,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         //  " " << jteta[j] << " " << j << " " << i <<  endl;
       }
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": finished jet ID selection");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": finished jet ID selection");
 
     // Apply JEC
     for (int j = 0; j < nref; ++j) {
@@ -625,15 +636,15 @@ void analyse_PhotonJet(string input = "PHOTONHP",
       // cout << "Applying JES" << endl;
       JEC.SetJetPT(jtpt[j]);
       JEC.SetJetEta(jteta[j]);
-      JEC.SetJetPhi(jtphi[j]);  
+      JEC.SetJetPhi(jtphi[j]);
 
       jtpt[j] = JEC.GetCorrectedPT();
 #endif
 
       // JER not applied for photon+jet L3 residual analysis
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": applied jet energy corrections");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": applied jet energy corrections");
 
     // ========================================
     // PHOTON+JET SELECTION
@@ -651,25 +662,34 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         continue; // Trigger threshold
       if (abs((*phoEta)[ipho]) > 1.3)
         continue; // Barrel only
-      
+
       if ((*phoSigmaIEtaIEta)[ipho] < 0.002)
         continue;
 
       // MC gen-matching selection: require matched generator photon with
       // reasonable mother PID and low calorimeter isolation. Only for MC.
       if (isMC) {
-        if (!pho_genMatchedIndex) continue;
-        if (ipho >= (int)pho_genMatchedIndex->size()) continue;
+        if (!pho_genMatchedIndex)
+          continue;
+        if (ipho >= (int)pho_genMatchedIndex->size())
+          continue;
         int genIdx = (*pho_genMatchedIndex)[ipho];
-        if (genIdx == -1) continue;
-        if (!mcPID || genIdx >= (int)mcPID->size()) continue;
-        if ((*mcPID)[genIdx] != 22) continue;
-        if (!mcMomPID || genIdx >= (int)mcMomPID->size()) continue;
+        if (genIdx == -1)
+          continue;
+        if (!mcPID || genIdx >= (int)mcPID->size())
+          continue;
+        if ((*mcPID)[genIdx] != 22)
+          continue;
+        if (!mcMomPID || genIdx >= (int)mcMomPID->size())
+          continue;
         int mom = (*mcMomPID)[genIdx];
         int absMom = std::abs(mom);
-        if (!(absMom <= 22 || mom == -999)) continue;
-        if (!mcCalIsoDR04 || genIdx >= (int)mcCalIsoDR04->size()) continue;
-        if (!((*mcCalIsoDR04)[genIdx] < 3.0)) continue;
+        if (!(absMom <= 22 || mom == -999))
+          continue;
+        if (!mcCalIsoDR04 || genIdx >= (int)mcCalIsoDR04->size())
+          continue;
+        if (!((*mcCalIsoDR04)[genIdx] < 3.0))
+          continue;
         currentGenIdx = genIdx;
       }
 
@@ -677,11 +697,12 @@ void analyse_PhotonJet(string input = "PHOTONHP",
       if ((*phoEt)[ipho] > leadPhotonPt) {
         leadPhotonPt = (*phoEt)[ipho];
         leadPhotonIdx = ipho;
-        if (isMC) leadPhotonGenIdx = currentGenIdx;
+        if (isMC)
+          leadPhotonGenIdx = currentGenIdx;
       }
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": finished leading photon search");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": finished leading photon search");
 
     // Stop early if no photon passes the kinematic preselection
     if (leadPhotonIdx < 0)
@@ -699,11 +720,12 @@ void analyse_PhotonJet(string input = "PHOTONHP",
       continue;
     if ((*pfpIso3subUEec)[leadPhotonIdx] > 2.0)
       continue;
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": passed photon ID cuts");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": passed photon ID cuts");
 
     // 2. Find leading and subleading away-side jets
-    // First: identify all jets back-to-back with photon (dphi > 2.7)// No just apply a small dR requirement
+    // First: identify all jets back-to-back with photon (dphi > 2.7)// No just
+    // apply a small dR requirement
     int awayJetIndices[MAXJETS];
     int nAwayJets = 0;
 
@@ -735,9 +757,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
       awayJetIndices[nAwayJets] = j;
       nAwayJets++;
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": identified " +
-                         std::to_string(nAwayJets) + " away-side jets");
-
+    log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": identified " +
+                       std::to_string(nAwayJets) + " away-side jets");
 
     // Need at least one away-side jet
     if (nAwayJets < 1)
@@ -761,7 +782,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     alpha = 0;
     if (nAwayJets >= 2) {
       int secondAwayJetIdx = awayJetIndices[1];
-      float ptavg_temp =(*phoEt)[leadPhotonIdx];
+      float ptavg_temp = (*phoEt)[leadPhotonIdx];
       alpha = jtpt[secondAwayJetIdx] / ptavg_temp;
     } else {
       alpha = 0; // Only one away-side jet
@@ -777,7 +798,9 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     float genPhotonPhi = 0;
     bool hasGenPhoton = false;
     if (isMC && leadPhotonGenIdx >= 0 && mcPt && mcEta && mcPhi) {
-      if (leadPhotonGenIdx < (int)mcPt->size() && leadPhotonGenIdx < (int)mcEta->size() && leadPhotonGenIdx < (int)mcPhi->size()) {
+      if (leadPhotonGenIdx < (int)mcPt->size() &&
+          leadPhotonGenIdx < (int)mcEta->size() &&
+          leadPhotonGenIdx < (int)mcPhi->size()) {
         genPhotonPt = (*mcPt)[leadPhotonGenIdx];
         genPhotonEta = (*mcEta)[leadPhotonGenIdx];
         genPhotonPhi = (*mcPhi)[leadPhotonGenIdx];
@@ -796,35 +819,39 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     ptavgtp = photon_pt;
     balance = jet_pt / photon_pt; // Response
     asymmtp = balance;            // For compatibility with histogram filling
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) +
-                 ": computed photon-jet observables");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": computed photon-jet observables");
 
     // Apply jet veto map to photon and leading/subleading away-side jets
     if (applyjetvetomap && vetomap) {
       bool passVetoMap = true;
-      
-      // Check photon position - Not required for photon since the vetomap is mostly due to pixel failures
-      // int pho_bin = vetomap->FindBin(photon_eta, photon_phi);
-      // if (vetomap->GetBinContent(pho_bin) > 0) passVetoMap = false;
-      
+
+      // Check photon position - Not required for photon since the vetomap is
+      // mostly due to pixel failures int pho_bin = vetomap->FindBin(photon_eta,
+      // photon_phi); if (vetomap->GetBinContent(pho_bin) > 0) passVetoMap =
+      // false;
+
       // Check leading away-side jet (probe)
       if (passVetoMap) {
         int jet_bin = vetomap->FindBin(jet_eta, jet_phi);
-        if (vetomap->GetBinContent(jet_bin) > 0) passVetoMap = false;
+        if (vetomap->GetBinContent(jet_bin) > 0)
+          passVetoMap = false;
       }
-      
+
       // Check subleading away-side jet if available
       if (passVetoMap && nAwayJets >= 2) {
         int secondAwayJetIdx = awayJetIndices[1];
-        int subjet_bin = vetomap->FindBin(jteta[secondAwayJetIdx], jtphi[secondAwayJetIdx]);
-        if (vetomap->GetBinContent(subjet_bin) > 0) passVetoMap = false;
+        int subjet_bin =
+            vetomap->FindBin(jteta[secondAwayJetIdx], jtphi[secondAwayJetIdx]);
+        if (vetomap->GetBinContent(subjet_bin) > 0)
+          passVetoMap = false;
       }
-      
-      if (!passVetoMap) continue;
-    }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": passed veto map selection");
 
+      if (!passVetoMap)
+        continue;
+    }
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": passed veto map selection");
 
     // cout << "TP:" << tagpt << " " << probept << " " << alpha << endl;
     // ========================================
@@ -847,11 +874,18 @@ void analyse_PhotonJet(string input = "PHOTONHP",
                                         evtwt);
 
           if (isMC && hasGenPhoton) {
-            if (h->genphoton_pt) h->genphoton_pt->Fill(genPhotonPt, evtwt);
-            if (h->genphoton_eta) h->genphoton_eta->Fill(genPhotonEta, evtwt);
-            if (h->genphoton_phi) h->genphoton_phi->Fill(genPhotonPhi, evtwt);
-            if (h->photonresponse && genPhotonPt > 0) h->photonresponse->Fill(genPhotonPt, photon_pt / genPhotonPt, evtwt);
-            if (h->photon_ptres && genPhotonPt > 0) h->photon_ptres->Fill((photon_pt - genPhotonPt) / genPhotonPt, evtwt);
+            if (h->genphoton_pt)
+              h->genphoton_pt->Fill(genPhotonPt, evtwt);
+            if (h->genphoton_eta)
+              h->genphoton_eta->Fill(genPhotonEta, evtwt);
+            if (h->genphoton_phi)
+              h->genphoton_phi->Fill(genPhotonPhi, evtwt);
+            if (h->photonresponse && genPhotonPt > 0)
+              h->photonresponse->Fill(genPhotonPt, photon_pt / genPhotonPt,
+                                      evtwt);
+            if (h->photon_ptres && genPhotonPt > 0)
+              h->photon_ptres->Fill((photon_pt - genPhotonPt) / genPhotonPt,
+                                    evtwt);
           }
 
           // Away-side jet properties
@@ -908,48 +942,84 @@ void analyse_PhotonJet(string input = "PHOTONHP",
           // 3D balance profiles (KEY HISTOGRAMS for L3 residual derivation)
           // Fill with CUMULATIVE alpha cuts (matching dijet analyse.cc pattern)
           // Alpha bins are read from histograms::alphavalues array
-          // Each event with alpha < threshold is filled into the bin corresponding to threshold
-          // Only fill in the wide eta bin since these have internal eta binning
+          // Each event with alpha < threshold is filled into the bin
+          // corresponding to threshold Only fill in the wide eta bin since
+          // these have internal eta binning
           if ((h->etamin - h->etamax) < -10) {
-            // Loop over alpha thresholds from histograms::alphavalues (skip first bin which is 0)
+            // Loop over alpha thresholds from histograms::alphavalues (skip
+            // first bin which is 0)
             for (unsigned int ia = 1; ia <= histograms::nalphavalues; ++ia) {
               double alphaThreshold = histograms::alphavalues[ia];
-              double alphaFillValue = alphaThreshold - 0.0001;  // Fill just below threshold to land in correct bin
-              
+              double alphaFillValue =
+                  alphaThreshold -
+                  0.0001; // Fill just below threshold to land in correct bin
+
               if (alpha < alphaThreshold) {
                 // Fill balance profiles (weighted)
-                h->photonjet_balance3D->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dwide->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dnarrow->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dabseta->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dabsetawide->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dabsetanarrow->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
-                if (h->photonjet_balance3D_jetpt) h->photonjet_balance3D_jetpt->Fill(jet_pt, jet_eta, alphaFillValue, balance, evtwt);
-                if (h->photonjet_balance3Dwide_jetpt) h->photonjet_balance3Dwide_jetpt->Fill(jet_pt, jet_eta, alphaFillValue, balance, evtwt);
-                if (h->photonjet_balance3Dnarrow_jetpt) h->photonjet_balance3Dnarrow_jetpt->Fill(jet_pt, jet_eta, alphaFillValue, balance, evtwt);
-                if (h->photonjet_balance3Dabseta_jetpt) h->photonjet_balance3Dabseta_jetpt->Fill(jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
-                if (h->photonjet_balance3Dabsetawide_jetpt) h->photonjet_balance3Dabsetawide_jetpt->Fill(jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
-                if (h->photonjet_balance3Dabsetanarrow_jetpt) h->photonjet_balance3Dabsetanarrow_jetpt->Fill(jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
-                
+                h->photonjet_balance3D->Fill(ptavgtp, jet_eta, alphaFillValue,
+                                             balance, evtwt);
+                h->photonjet_balance3Dwide->Fill(
+                    ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
+                h->photonjet_balance3Dnarrow->Fill(
+                    ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
+                h->photonjet_balance3Dabseta->Fill(
+                    ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                h->photonjet_balance3Dabsetawide->Fill(
+                    ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                h->photonjet_balance3Dabsetanarrow->Fill(
+                    ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3D_jetpt)
+                  h->photonjet_balance3D_jetpt->Fill(
+                      jet_pt, jet_eta, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dwide_jetpt)
+                  h->photonjet_balance3Dwide_jetpt->Fill(
+                      jet_pt, jet_eta, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dnarrow_jetpt)
+                  h->photonjet_balance3Dnarrow_jetpt->Fill(
+                      jet_pt, jet_eta, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dabseta_jetpt)
+                  h->photonjet_balance3Dabseta_jetpt->Fill(
+                      jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dabsetawide_jetpt)
+                  h->photonjet_balance3Dabsetawide_jetpt->Fill(
+                      jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance3Dabsetanarrow_jetpt)
+                  h->photonjet_balance3Dabsetanarrow_jetpt->Fill(
+                      jet_pt, abs(jet_eta), alphaFillValue, balance, evtwt);
+
                 // Fill counts histograms (UNWEIGHTED - just count entries)
-                if (h->photonjet_balance3D_counts) h->photonjet_balance3D_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
-                if (h->photonjet_balance3Dwide_counts) h->photonjet_balance3Dwide_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
-                if (h->photonjet_balance3Dnarrow_counts) h->photonjet_balance3Dnarrow_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
-                if (h->photonjet_balance3Dabseta_counts) h->photonjet_balance3Dabseta_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
-                if (h->photonjet_balance3Dabsetawide_counts) h->photonjet_balance3Dabsetawide_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
-                if (h->photonjet_balance3Dabsetanarrow_counts) h->photonjet_balance3Dabsetanarrow_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
-                
+                if (h->photonjet_balance3D_counts)
+                  h->photonjet_balance3D_counts->Fill(ptavgtp, jet_eta,
+                                                      alphaFillValue);
+                if (h->photonjet_balance3Dwide_counts)
+                  h->photonjet_balance3Dwide_counts->Fill(ptavgtp, jet_eta,
+                                                          alphaFillValue);
+                if (h->photonjet_balance3Dnarrow_counts)
+                  h->photonjet_balance3Dnarrow_counts->Fill(ptavgtp, jet_eta,
+                                                            alphaFillValue);
+                if (h->photonjet_balance3Dabseta_counts)
+                  h->photonjet_balance3Dabseta_counts->Fill(
+                      ptavgtp, abs(jet_eta), alphaFillValue);
+                if (h->photonjet_balance3Dabsetawide_counts)
+                  h->photonjet_balance3Dabsetawide_counts->Fill(
+                      ptavgtp, abs(jet_eta), alphaFillValue);
+                if (h->photonjet_balance3Dabsetanarrow_counts)
+                  h->photonjet_balance3Dabsetanarrow_counts->Fill(
+                      ptavgtp, abs(jet_eta), alphaFillValue);
+
                 // Fill balance distribution (photon_pT, alpha, balance_value)
                 // Fill with weight for each cumulative alpha cut
-                if (h->photonjet_balance_dist) h->photonjet_balance_dist->Fill(ptavgtp, alphaFillValue, balance, evtwt);
+                if (h->photonjet_balance_dist)
+                  h->photonjet_balance_dist->Fill(ptavgtp, alphaFillValue,
+                                                  balance, evtwt);
               }
             }
           }
         }
       }
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": filled photon-jet histograms");
-
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": filled photon-jet histograms");
 
     // Additional jet histograms for all jets in the event
     for (int j = 0; j < nref; ++j) {
@@ -1018,7 +1088,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         }
       }
     }
-          log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": filled inclusive jet histograms");
+    log(LOG_TRACE,
+        "Event " + std::to_string(i + 1) + ": filled inclusive jet histograms");
 
   } // end of event loop
   log(LOG_INFO, "Finished processing all events");
@@ -1037,7 +1108,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   // Write and close output file
   outfile->Write();
   log(LOG_INFO, "Wrote " + outputfilename);
-  
+
   // Close file properly - TFile destructor handles all owned histogram cleanup
   outfile->Close();
   delete outfile;

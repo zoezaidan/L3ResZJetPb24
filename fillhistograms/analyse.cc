@@ -1,30 +1,31 @@
-// Macro for filling histograms for dijet residual, MC JER and JER SF analysis from HiForest tuples.
-// Note: assumes uncorrected jets
-//       at the moment branches are hard coded for AK4 jets from 2023 pp reference, using either ZB or HP dataset or MC
+// Macro for filling histograms for dijet residual, MC JER and JER SF analysis
+// from HiForest tuples. Note: assumes uncorrected jets
+//       at the moment branches are hard coded for AK4 jets from 2023 pp
+//       reference, using either ZB or HP dataset or MC
 
 #include <iostream>
 using std::cout;
 using std::endl;
 
-#include "TRandom.h"
+#include "TFile.h"
 #include "TH1D.h"
-#include <iterator>
 #include "TMath.h"
+#include "TRandom.h"
+#include "TTree.h"
 #include <cmath>
 #include <cstdio>
 #include <ctime>
-#include "TFile.h"
+#include <iterator>
 #include <typeinfo>
-#include "TTree.h"
 
+#include "configurations.h"
 #include "histograms.h"
 #include "settings.h"
-#include "configurations.h"
 
+#include "chain_builder.h"
 #include "eventhistograms.h"
 #include "helpers.h"
 #include "input_config.h"
-#include "chain_builder.h"
 
 #include "JetMETCorrections/Modules/interface/JetResolution.h"
 JME::JetResolution *_jer(0);
@@ -38,15 +39,23 @@ std::uint32_t _seed = 4;
 #include "CondFormats/JetMETObjects/interface/JetCorrectorParameters.h"
 #endif
 
-map<string, vector<histograms*> > _histos;
+map<string, vector<histograms *>> _histos;
 
 bool debug = false;
 int debugevts = 1;
 bool applyjetvetomap = true;
-bool isrun3jersf = true; // Run3 JER SF in pp is pT dependent and applied like JEC
+bool isrun3jersf =
+    true; // Run3 JER SF in pp is pT dependent and applied like JEC
 
-void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bool isMC = false, bool checkjetid = false, bool iszb = false, bool dol2res = false, bool dojer = false, bool fillforJER = false,float jtptlimitforalpha = 15, string inputType = "era", int maxFiles = -1, int maxEvents = -1, string outputDir = "", int batchIndex = -1, int totalBatches = 1, string jetPath = "ak4PFJetAnalyzer/t", string jesvariation = "nominal", string jersfvariation = "nominal") {
-
+void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid",
+             bool isMC = false, bool checkjetid = false, bool iszb = false,
+             bool dol2res = false, bool dojer = false, bool fillforJER = false,
+             float jtptlimitforalpha = 15, string inputType = "era",
+             int maxFiles = -1, int maxEvents = -1, string outputDir = "",
+             int batchIndex = -1, int totalBatches = 1,
+             string jetPath = "ak4PFJetAnalyzer/t",
+             string jesvariation = "nominal",
+             string jersfvariation = "nominal") {
 
   bool usecalotrig = false;
   // Build input configuration
@@ -60,7 +69,8 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
 
   // Set default output directory
   if (outputDir.empty()) {
-    config.outputDir = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L2ResDiJet";
+    config.outputDir =
+        "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L2ResDiJet";
   } else {
     config.outputDir = outputDir;
   }
@@ -102,19 +112,23 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
   }
 
   if (batchIndex >= 0) {
-    outputfilename = Form("%s/%s_%s_batch%d_of_%d.root", config.outputDir.c_str(), inputName.c_str(), outputfiletag.c_str(), batchIndex, totalBatches);
+    outputfilename = Form("%s/%s_%s_batch%d_of_%d.root",
+                          config.outputDir.c_str(), inputName.c_str(),
+                          outputfiletag.c_str(), batchIndex, totalBatches);
   } else {
-    outputfilename = Form("%s/%s_%s.root", config.outputDir.c_str(), inputName.c_str(), outputfiletag.c_str());
+    outputfilename = Form("%s/%s_%s.root", config.outputDir.c_str(),
+                          inputName.c_str(), outputfiletag.c_str());
   }
 
-  if (debug) outputfilename = "test.root";
-  
+  if (debug)
+    outputfilename = "test.root";
+
   TRandom3 r;
   // Define and activate branches
   std::string evtPath = "hiEvtAnalyzer/HiTree";
   std::string triggerPath = "hltanalysis/HltTree";
   std::string skimPath = "skimanalysis/HltTree";
-//   std::string egmPath = "ggHiNtuplizer/EventTree"; 
+  //   std::string egmPath = "ggHiNtuplizer/EventTree";
 
   cout << "Using jet tree: " << jetPath << endl;
 
@@ -135,118 +149,130 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
     cerr << "ERROR: Data input is missing hltanalysis/HltTree" << endl;
     return;
   }
-  
+
   // Cuts and weights from event tree
-  Int_t       hiBin = -1;
-  Float_t     weight = 1, vz = 0, pthat = 0, evtwt = 1;
-  
+  Int_t hiBin = -1;
+  Float_t weight = 1, vz = 0, pthat = 0, evtwt = 1;
+
   evtTree->SetBranchAddress("hiBin", &hiBin);
   evtTree->SetBranchAddress("vz", &vz);
-  if (isMC) evtTree->SetBranchAddress("weight", &weight);
-  if (isMC) evtTree->SetBranchAddress("pthat", &pthat);
+  if (isMC)
+    evtTree->SetBranchAddress("weight", &weight);
+  if (isMC)
+    evtTree->SetBranchAddress("pthat", &pthat);
 
-  evtTree->SetBranchStatus("*",0);
-  evtTree->SetBranchStatus("hiBin",1);
-  evtTree->SetBranchStatus("vz",1);
-  if (isMC) evtTree->SetBranchStatus("weight",1);
-  if (isMC) evtTree->SetBranchStatus("pthat",1);
+  evtTree->SetBranchStatus("*", 0);
+  evtTree->SetBranchStatus("hiBin", 1);
+  evtTree->SetBranchStatus("vz", 1);
+  if (isMC)
+    evtTree->SetBranchStatus("weight", 1);
+  if (isMC)
+    evtTree->SetBranchStatus("pthat", 1);
 
   //// EVENT FILTERS
-  if (!isMC) skimTree->SetBranchStatus("*",1);
+  if (!isMC)
+    skimTree->SetBranchStatus("*", 1);
 
   Int_t pprimaryVertexFilter = 1;
-  if (!isMC) skimTree->SetBranchAddress("pprimaryVertexFilter", &pprimaryVertexFilter);
-  
+  if (!isMC)
+    skimTree->SetBranchAddress("pprimaryVertexFilter", &pprimaryVertexFilter);
+
   Int_t trigger = 0;
   bool useTriggerSelection = false;
 
   // Triggger paths in the files
-  Int_t HLT_ZB = 0, HLT_40 = 0, HLT_60 = 0, HLT_80 = 0, HLT_100 = 0, HLT_120 = 0;
- 
-  if (!isMC) triggerTree->SetBranchAddress("HLT_PPRefZeroBias_v1",&HLT_ZB);
-  
+  Int_t HLT_ZB = 0, HLT_40 = 0, HLT_60 = 0, HLT_80 = 0, HLT_100 = 0,
+        HLT_120 = 0;
+
+  if (!isMC)
+    triggerTree->SetBranchAddress("HLT_PPRefZeroBias_v1", &HLT_ZB);
+
   if (!usecalotrig and !isMC) {
-    bool hasPFTriggers =
-      triggerTree->GetBranch("HLT_AK4PFJet40_v1") &&
-      triggerTree->GetBranch("HLT_AK4PFJet60_v1") &&
-      triggerTree->GetBranch("HLT_AK4PFJet100_v1") &&
-      triggerTree->GetBranch("HLT_AK4PFJet120_v1");
+    bool hasPFTriggers = triggerTree->GetBranch("HLT_AK4PFJet40_v1") &&
+                         triggerTree->GetBranch("HLT_AK4PFJet60_v1") &&
+                         triggerTree->GetBranch("HLT_AK4PFJet100_v1") &&
+                         triggerTree->GetBranch("HLT_AK4PFJet120_v1");
 
     if (hasPFTriggers) {
       cout << "Use PF triggers" << endl;
       useTriggerSelection = true;
-  
-      triggerTree->SetBranchAddress("HLT_AK4PFJet40_v1",&HLT_40);
-      triggerTree->SetBranchAddress("HLT_AK4PFJet60_v1",&HLT_60);
-      if (triggerTree->GetBranch("HLT_AK4PFJet80_v1")) triggerTree->SetBranchAddress("HLT_AK4PFJet80_v1",&HLT_80);
-      triggerTree->SetBranchAddress("HLT_AK4PFJet100_v1",&HLT_100);
-      triggerTree->SetBranchAddress("HLT_AK4PFJet120_v1",&HLT_120);
 
-      triggerTree->SetBranchStatus("*",0);
-      if (triggerTree->GetBranch("HLT_PPRefZeroBias_v1")) triggerTree->SetBranchStatus("HLT_PPRefZeroBias_v1",1);
-      triggerTree->SetBranchStatus("HLT_AK4PFJet40_v1",1);
-      triggerTree->SetBranchStatus("HLT_AK4PFJet60_v1",1);
-      if (triggerTree->GetBranch("HLT_AK4PFJet80_v1")) triggerTree->SetBranchStatus("HLT_AK4PFJet80_v1",1);
-      triggerTree->SetBranchStatus("HLT_AK4PFJet100_v1",1);
-      triggerTree->SetBranchStatus("HLT_AK4PFJet120_v1",1);
+      triggerTree->SetBranchAddress("HLT_AK4PFJet40_v1", &HLT_40);
+      triggerTree->SetBranchAddress("HLT_AK4PFJet60_v1", &HLT_60);
+      if (triggerTree->GetBranch("HLT_AK4PFJet80_v1"))
+        triggerTree->SetBranchAddress("HLT_AK4PFJet80_v1", &HLT_80);
+      triggerTree->SetBranchAddress("HLT_AK4PFJet100_v1", &HLT_100);
+      triggerTree->SetBranchAddress("HLT_AK4PFJet120_v1", &HLT_120);
+
+      triggerTree->SetBranchStatus("*", 0);
+      if (triggerTree->GetBranch("HLT_PPRefZeroBias_v1"))
+        triggerTree->SetBranchStatus("HLT_PPRefZeroBias_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4PFJet40_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4PFJet60_v1", 1);
+      if (triggerTree->GetBranch("HLT_AK4PFJet80_v1"))
+        triggerTree->SetBranchStatus("HLT_AK4PFJet80_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4PFJet100_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4PFJet120_v1", 1);
     } else {
-      cout << "WARNING: Expected PF trigger branches not found; disabling trigger selection for this input." << endl;
+      cout << "WARNING: Expected PF trigger branches not found; disabling "
+              "trigger selection for this input."
+           << endl;
     }
-    
   }
   if (usecalotrig and !isMC) {
-    bool hasCaloTriggers =
-      triggerTree->GetBranch("HLT_AK4CaloJet40_v1") &&
-      triggerTree->GetBranch("HLT_AK4CaloJet60_v1") &&
-      triggerTree->GetBranch("HLT_AK4CaloJet100_v1") &&
-      triggerTree->GetBranch("HLT_AK4CaloJet120_v1");
+    bool hasCaloTriggers = triggerTree->GetBranch("HLT_AK4CaloJet40_v1") &&
+                           triggerTree->GetBranch("HLT_AK4CaloJet60_v1") &&
+                           triggerTree->GetBranch("HLT_AK4CaloJet100_v1") &&
+                           triggerTree->GetBranch("HLT_AK4CaloJet120_v1");
 
     if (hasCaloTriggers) {
       cout << "Use Calo triggers" << endl;
       useTriggerSelection = true;
-    
-    triggerTree->SetBranchAddress("HLT_AK4CaloJet40_v1",&HLT_40);
-    triggerTree->SetBranchAddress("HLT_AK4CaloJet60_v1",&HLT_60); 
-    //triggerTree->SetBranchAddress("HLT_AK4CaloJet80_v1",&HLT_80); 
-    triggerTree->SetBranchAddress("HLT_AK4CaloJet100_v1",&HLT_100);
-    triggerTree->SetBranchAddress("HLT_AK4CaloJet120_v1",&HLT_120);
-    
-    triggerTree->SetBranchStatus("*",0);
-    
-    if (triggerTree->GetBranch("HLT_PPRefZeroBias_v1")) triggerTree->SetBranchStatus("HLT_PPRefZeroBias_v1",1);
-    triggerTree->SetBranchStatus("HLT_AK4CaloJet40_v1",1);
-    triggerTree->SetBranchStatus("HLT_AK4CaloJet60_v1",1);
-    //triggerTree->SetBranchStatus("HLT_AK4CaloJet80_v1",1);
-    triggerTree->SetBranchStatus("HLT_AK4CaloJet100_v1",1);
-    triggerTree->SetBranchStatus("HLT_AK4CaloJet120_v1",1);
+
+      triggerTree->SetBranchAddress("HLT_AK4CaloJet40_v1", &HLT_40);
+      triggerTree->SetBranchAddress("HLT_AK4CaloJet60_v1", &HLT_60);
+      // triggerTree->SetBranchAddress("HLT_AK4CaloJet80_v1",&HLT_80);
+      triggerTree->SetBranchAddress("HLT_AK4CaloJet100_v1", &HLT_100);
+      triggerTree->SetBranchAddress("HLT_AK4CaloJet120_v1", &HLT_120);
+
+      triggerTree->SetBranchStatus("*", 0);
+
+      if (triggerTree->GetBranch("HLT_PPRefZeroBias_v1"))
+        triggerTree->SetBranchStatus("HLT_PPRefZeroBias_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4CaloJet40_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4CaloJet60_v1", 1);
+      // triggerTree->SetBranchStatus("HLT_AK4CaloJet80_v1",1);
+      triggerTree->SetBranchStatus("HLT_AK4CaloJet100_v1", 1);
+      triggerTree->SetBranchStatus("HLT_AK4CaloJet120_v1", 1);
     } else {
-      cout << "WARNING: Expected Calo trigger branches not found; disabling trigger selection for this input." << endl;
+      cout << "WARNING: Expected Calo trigger branches not found; disabling "
+              "trigger selection for this input."
+           << endl;
     }
-    
   }
 
-  // JETS 
-  jetTree->SetBranchStatus("*",1);    
+  // JETS
+  jetTree->SetBranchStatus("*", 1);
 
-  Int_t     evt;
-  
+  Int_t evt;
+
   // Reconstruted jet information
-  Int_t     nref;
-  Float_t   jtpt[MAXJETS];
-  Float_t   jtpt_uncorr[MAXJETS];
-  Float_t   jteta[MAXJETS];
-  Float_t   jtphi[MAXJETS];
+  Int_t nref;
+  Float_t jtpt[MAXJETS];
+  Float_t jtpt_uncorr[MAXJETS];
+  Float_t jteta[MAXJETS];
+  Float_t jtphi[MAXJETS];
 
-  Float_t   jtnhf[MAXJETS];
-  Float_t   jtchf[MAXJETS];
-  Float_t   jtnef[MAXJETS];
-  Float_t   jtcef[MAXJETS];
-  Float_t   jtmuf[MAXJETS];
+  Float_t jtnhf[MAXJETS];
+  Float_t jtchf[MAXJETS];
+  Float_t jtnef[MAXJETS];
+  Float_t jtcef[MAXJETS];
+  Float_t jtmuf[MAXJETS];
 
-  Int_t   jtchm[MAXJETS]; // charged multiplicity
+  Int_t jtchm[MAXJETS]; // charged multiplicity
 
-  Int_t   jtn[MAXJETS];
- 
+  Int_t jtn[MAXJETS];
+
   jetTree->SetBranchAddress("evt", &evt);
   jetTree->SetBranchAddress("nref", &nref);
   jetTree->SetBranchAddress("jtpt", &jtpt);
@@ -260,12 +286,12 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
   jetTree->SetBranchAddress("jtPfMUF", &jtmuf);
 
   jetTree->SetBranchAddress("jtPfCHM", &jtchm);
-  
+
   // Gen level jet information
-  Float_t   jtpt_gen[MAXJETS];
-  Float_t   jteta_gen[MAXJETS];
-  Float_t   jtphi_gen[MAXJETS];
-  Float_t   refdrjt[MAXJETS];
+  Float_t jtpt_gen[MAXJETS];
+  Float_t jteta_gen[MAXJETS];
+  Float_t jtphi_gen[MAXJETS];
+  Float_t refdrjt[MAXJETS];
 
   if (isMC) {
     jetTree->SetBranchAddress("refpt", &jtpt_gen);
@@ -274,584 +300,828 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
     jetTree->SetBranchAddress("refdrjt", &refdrjt);
   }
 
-  TFile *outfile = new TFile(outputfilename.c_str(),"RECREATE");
+  TFile *outfile = new TFile(outputfilename.c_str(), "RECREATE");
 
-  // Create folders for centrality bins. Mostly a placeholder in case PbPb MC/data is checked.
-  for (int j = 0; j < nhibins; ++j) { 
-  
-      if (hibins[j] < hibins[j+1]) {
-	string name = Form("hibin_%.1f_%.1f",hibins[j],hibins[j+1]);
-	outfile->mkdir(name.c_str());
-	
-	TDirectory *dir = outfile->GetDirectory(name.c_str()); assert(dir);
-	dir->cd();
-    
-	for (int i = 0; i < netabins ; ++i) { 
-	  if (etaedges[i] < etaedges[i+1]) {
-	    string name2 = Form("eta_%.1f_%.1f",etaedges[i],etaedges[i+1]);
-	    dir->mkdir(name2.c_str());
-	
-	    TDirectory *dir2 = dir->GetDirectory(name2.c_str()); assert(dir2);
-	    dir2->cd();
-	    
-	    histograms *h = new histograms(dir2, etaedges[i], etaedges[i+1], hibins[j],hibins[j+1], isMC);
-	    _histos[name2.c_str()].push_back(h);
-	  }
-	}
+  // Create folders for centrality bins. Mostly a placeholder in case PbPb
+  // MC/data is checked.
+  for (int j = 0; j < nhibins; ++j) {
+
+    if (hibins[j] < hibins[j + 1]) {
+      string name = Form("hibin_%.1f_%.1f", hibins[j], hibins[j + 1]);
+      outfile->mkdir(name.c_str());
+
+      TDirectory *dir = outfile->GetDirectory(name.c_str());
+      assert(dir);
+      dir->cd();
+
+      for (int i = 0; i < netabins; ++i) {
+        if (etaedges[i] < etaedges[i + 1]) {
+          string name2 = Form("eta_%.1f_%.1f", etaedges[i], etaedges[i + 1]);
+          dir->mkdir(name2.c_str());
+
+          TDirectory *dir2 = dir->GetDirectory(name2.c_str());
+          assert(dir2);
+          dir2->cd();
+
+          histograms *h = new histograms(dir2, etaedges[i], etaedges[i + 1],
+                                         hibins[j], hibins[j + 1], isMC);
+          _histos[name2.c_str()].push_back(h);
+        }
       }
+    }
   }
 
   outfile->mkdir("event");
-  TDirectory *dir = outfile->GetDirectory("event"); assert(dir);
+  TDirectory *dir = outfile->GetDirectory("event");
+  assert(dir);
   dir->cd();
 
   eventhistograms *eh = new eventhistograms(dir, isMC);
-   
 
 #if REDOJES == 1
   cout << "Applying MC JEC from file " << jecfile.c_str() << endl;
-  FactorizedJetCorrector* corr;
+  FactorizedJetCorrector *corr;
   vector<JetCorrectorParameters> vpar;
   // This is MCTruth
   vpar.push_back(JetCorrectorParameters(jecfile.c_str()));
   // L2 residual
-  if (!isMC and dol2res) vpar.push_back(JetCorrectorParameters(l2file.c_str()));
-  if (dol2res) cout << "Applying L2 residual from file " << l2file.c_str() << endl;
+  if (!isMC and dol2res)
+    vpar.push_back(JetCorrectorParameters(l2file.c_str()));
+  if (dol2res)
+    cout << "Applying L2 residual from file " << l2file.c_str() << endl;
   corr = new FactorizedJetCorrector(vpar);
 #endif
 
   JetCorrectionUncertainty *jecunc(0), *jersfunc(0);
-  if (jesvariation == "up" or jesvariation == "down") jecunc =  new JetCorrectionUncertainty(jecuncertFile);
-  if (jersfvariation == "up" or jersfvariation == "down") jersfunc =  new JetCorrectionUncertainty(jersfuncertFile);
-  
-  FactorizedJetCorrector* corrforjersf;
+  if (jesvariation == "up" or jesvariation == "down")
+    jecunc = new JetCorrectionUncertainty(jecuncertFile);
+  if (jersfvariation == "up" or jersfvariation == "down")
+    jersfunc = new JetCorrectionUncertainty(jersfuncertFile);
+
+  FactorizedJetCorrector *corrforjersf;
   vector<JetCorrectorParameters> jersfpar;
- 
+
   if (dojer and isMC) {
     cout << "Applying JER SF" << endl;
 
     _jer = new JME::JetResolution(resolutionFile);
-    
+
     if (isrun3jersf) {
       jersfpar.push_back(JetCorrectorParameters(scaleFactorFile.c_str()));
       corrforjersf = new FactorizedJetCorrector(jersfpar);
-    }
-    else _jer_sf =  new JME::JetResolutionScaleFactor(scaleFactorFile);
-    
+    } else
+      _jer_sf = new JME::JetResolutionScaleFactor(scaleFactorFile);
   }
 
   // Jet veto map
-//   auto mapfile = new TFile("jecfiles/Summer23BPixPrompt23_RunD_v1.root","READ");
-//   auto vetomap = (TH2D*)mapfile->Get("jetvetomap_all");
+  //   auto mapfile = new
+  //   TFile("jecfiles/Summer23BPixPrompt23_RunD_v1.root","READ"); auto vetomap
+  //   = (TH2D*)mapfile->Get("jetvetomap_all");
 
-  
-   cout << "Number of entries :" <<  chains->nEntries  << endl; 
-   Long64_t nentries = chains->nEntries;
-   if (config.maxEvents > 0 && config.maxEvents < nentries) {
-     nentries = config.maxEvents;
-   }
-   if (debug && nentries > 1000) nentries = debugevts;
+  cout << "Number of entries :" << chains->nEntries << endl;
+  Long64_t nentries = chains->nEntries;
+  if (config.maxEvents > 0 && config.maxEvents < nentries) {
+    nentries = config.maxEvents;
+  }
+  if (debug && nentries > 1000)
+    nentries = debugevts;
 
-   cout << "Processing " << nentries << " events" << endl;
-   for (Long64_t i = 0; i < nentries; ++i) {
+  cout << "Processing " << nentries << " events" << endl;
+  for (Long64_t i = 0; i < nentries; ++i) {
     evtTree->GetEntry(i);
-    if (!isMC) triggerTree->GetEntry(i);
+    if (!isMC)
+      triggerTree->GetEntry(i);
 
-     //trigger = HLT_ZB or HLT_40 or HLT_60;
+    // trigger = HLT_ZB or HLT_40 or HLT_60;
 
-     trigger = true;
-     if (!isMC && useTriggerSelection) {
-       if (iszb) trigger = HLT_ZB;
-       else trigger = HLT_60;
-     }
+    trigger = true;
+    if (!isMC && useTriggerSelection) {
+      if (iszb)
+        trigger = HLT_ZB;
+      else
+        trigger = HLT_60;
+    }
 
-     if (!trigger) continue;
-     
-     evtwt = 1;
-     if (isMC) {
-       evtwt *=  weight;
-     }
-          
-     // BASIC EVENT FILTERS
-     if (!isMC) {
-       skimTree->GetEntry(i);
-       if (pprimaryVertexFilter != 1) continue;
-     }
-     jetTree->GetEntry(i);
+    if (!trigger)
+      continue;
 
-     // Need dijets, hard enough leading jet
-     if (nref < 2) continue;
-     if (jtpt[0] < jtptmin)  continue;
+    evtwt = 1;
+    if (isMC) {
+      evtwt *= weight;
+    }
 
-     eh->event_vz->Fill(vz, evtwt);
-     if (isMC)  eh->event_pthatwsgenweight->Fill(pthat,weight);
+    // BASIC EVENT FILTERS
+    if (!isMC) {
+      skimTree->GetEntry(i);
+      if (pprimaryVertexFilter != 1)
+        continue;
+    }
+    jetTree->GetEntry(i);
 
-     // This is dijet with tag and probe
-     double tagpt, probept, tageta, probeeta, pt3, ptavgtp, alpha, asymmtp;
-     double tagpt_gen, probept_gen, tageta_gen, probeeta_gen, pt3_gen, ptavgtp_gen, alpha_gen, asymmtp_gen;
-     double djrespasymm; 
+    // Need dijets, hard enough leading jet
+    if (nref < 2)
+      continue;
+    if (jtpt[0] < jtptmin)
+      continue;
 
-     // JET ID - this is 2023 AK4CHS jet selection 12/2024
-     bool passjetid[nref];
-     for (int j = 0; j < nref; ++j) {
-       passjetid[j] = true;
-       if (checkjetid) {
-	   if (abs(jteta[j]) <= 2.6) {
-	        if (jtnhf[j] >= 0.99) passjetid[j] = false;
-		if (jtnef[j] >= 0.9) passjetid[j] = false;
-		if (jtchf[j] <= 0.01) passjetid[j] = false;
-		if (jtcef[j] >= 0.8) passjetid[j] = false;
-		if (jtmuf[j] >= 0.8) passjetid[j] = false;
-		if (jtchm[j] <= 0) passjetid[j] = false;
-	  }
-	  else if (abs(jteta[j]) <= 2.7) {
-             if (jtnhf[j] >= 0.9) passjetid[j] = false;
-	     if (jtnef[j] >= 0.99) passjetid[j] = false;
-	     if (jtmuf[j] >= 0.8) passjetid[j] = false;
-	     if (jtcef[j] >= 0.8) passjetid[j] = false;
+    eh->event_vz->Fill(vz, evtwt);
+    if (isMC)
+      eh->event_pthatwsgenweight->Fill(pthat, weight);
 
-          }  
-          else if (abs(jteta[j]) <= 3.0) {
-               if (jtnhf[j] >= 0.99) passjetid[j] = false;
-	       if (jtnef[j] >= 0.99) passjetid[j] = false;
-          }
-          else if (abs(jteta[j]) <= 5.0)  {
-	    if (jtnef[j] >= 0.4) passjetid[j] = false;
+    // This is dijet with tag and probe
+    double tagpt, probept, tageta, probeeta, pt3, ptavgtp, alpha, asymmtp;
+    double tagpt_gen, probept_gen, tageta_gen, probeeta_gen, pt3_gen,
+        ptavgtp_gen, alpha_gen, asymmtp_gen;
+    double djrespasymm;
 
-          }
-	 }
-       }
+    // JET ID - this is 2023 AK4CHS jet selection 12/2024
+    bool passjetid[nref];
+    for (int j = 0; j < nref; ++j) {
+      passjetid[j] = true;
+      if (checkjetid) {
+        if (abs(jteta[j]) <= 2.6) {
+          if (jtnhf[j] >= 0.99)
+            passjetid[j] = false;
+          if (jtnef[j] >= 0.9)
+            passjetid[j] = false;
+          if (jtchf[j] <= 0.01)
+            passjetid[j] = false;
+          if (jtcef[j] >= 0.8)
+            passjetid[j] = false;
+          if (jtmuf[j] >= 0.8)
+            passjetid[j] = false;
+          if (jtchm[j] <= 0)
+            passjetid[j] = false;
+        } else if (abs(jteta[j]) <= 2.7) {
+          if (jtnhf[j] >= 0.9)
+            passjetid[j] = false;
+          if (jtnef[j] >= 0.99)
+            passjetid[j] = false;
+          if (jtmuf[j] >= 0.8)
+            passjetid[j] = false;
+          if (jtcef[j] >= 0.8)
+            passjetid[j] = false;
 
-     
-     // Apply JEC
-     for (int j = 0; j < nref; ++j ) {
- 	 jtpt_uncorr[j] = jtpt[j];
+        } else if (abs(jteta[j]) <= 3.0) {
+          if (jtnhf[j] >= 0.99)
+            passjetid[j] = false;
+          if (jtnef[j] >= 0.99)
+            passjetid[j] = false;
+        } else if (abs(jteta[j]) <= 5.0) {
+          if (jtnef[j] >= 0.4)
+            passjetid[j] = false;
+        }
+      }
+    }
+
+    // Apply JEC
+    for (int j = 0; j < nref; ++j) {
+      jtpt_uncorr[j] = jtpt[j];
 
 #if REDOJES == 1
-	 // cout << "Applying JES" << endl;
-	 corr->setJetPt(jtpt[j]);
-	 corr->setJetEta(jteta[j]);
+      // cout << "Applying JES" << endl;
+      corr->setJetPt(jtpt[j]);
+      corr->setJetEta(jteta[j]);
 
-	 vector<float> v = corr->getSubCorrections();
-	 float jes = v.back();
+      vector<float> v = corr->getSubCorrections();
+      float jes = v.back();
 
-	 //	 cout << "New jes correction jet pt: " << jtpt[j] << " " << jteta[j] << " "  << jes << endl;
-	 jtpt[j] *= jes;
+      //	 cout << "New jes correction jet pt: " << jtpt[j] << " " <<
+      //jteta[j] << " "  << jes << endl;
+      jtpt[j] *= jes;
 
-	 if (jesvariation == "up" or jesvariation == "down") { 
-	   jecunc->setJetEta(jteta[j]);
-	   jecunc->setJetPt(jtpt[j]);
-	   if (jesvariation == "up" ) jtpt[j] *= 1+jecunc->getUncertainty(true);
-	   if (jesvariation == "down" ) jtpt[j] *= 1-jecunc->getUncertainty(false); 
-	 }
-  
+      if (jesvariation == "up" or jesvariation == "down") {
+        jecunc->setJetEta(jteta[j]);
+        jecunc->setJetPt(jtpt[j]);
+        if (jesvariation == "up")
+          jtpt[j] *= 1 + jecunc->getUncertainty(true);
+        if (jesvariation == "down")
+          jtpt[j] *= 1 - jecunc->getUncertainty(false);
+      }
+
 #endif
 
-	 if (isMC and dojer and jteta[j] <= 5.2) { // In very low pTs sometimes things go wrong 
-	   double jet_resolution = _jer->getResolution({{JME::Binning::JetPt, jtpt[j]}, {JME::Binning::JetEta, jteta[j]}, {JME::Binning::Rho, rho}});
-	   double jer_sf = 1; 
+      if (isMC and dojer and
+          jteta[j] <= 5.2) { // In very low pTs sometimes things go wrong
+        double jet_resolution =
+            _jer->getResolution({{JME::Binning::JetPt, jtpt[j]},
+                                 {JME::Binning::JetEta, jteta[j]},
+                                 {JME::Binning::Rho, rho}});
+        double jer_sf = 1;
 
-	   if (isrun3jersf) {
+        if (isrun3jersf) {
 
-	     corrforjersf->setJetPt(jtpt[j]);
-	     corrforjersf->setJetEta(jteta[j]);
+          corrforjersf->setJetPt(jtpt[j]);
+          corrforjersf->setJetEta(jteta[j]);
 
-	     vector<float> vsf = corrforjersf->getSubCorrections();
-	     jer_sf = vsf.back();
+          vector<float> vsf = corrforjersf->getSubCorrections();
+          jer_sf = vsf.back();
 
-	     if (jersfvariation == "up" or jersfvariation == "down") {
-	       jersfunc->setJetEta(jteta[j]);
-	       jersfunc->setJetPt(jtpt[j]);
+          if (jersfvariation == "up" or jersfvariation == "down") {
+            jersfunc->setJetEta(jteta[j]);
+            jersfunc->setJetPt(jtpt[j]);
 
-	       float unc = 0;
-	       if (jersfvariation == "up" )  {
-		 unc = jersfunc->getUncertainty(true);
-		 jer_sf += unc*(1+jersfuncscale);
-	       }
-	       if (jersfvariation == "down" ) {
-		 unc = jersfunc->getUncertainty(false);
-		 jer_sf -= unc*(1+jersfuncscale);
-	       }
-	       
-	       if (debug) cout << "JER unc is " << unc << " and sf is " << jer_sf << endl;
+            float unc = 0;
+            if (jersfvariation == "up") {
+              unc = jersfunc->getUncertainty(true);
+              jer_sf += unc * (1 + jersfuncscale);
+            }
+            if (jersfvariation == "down") {
+              unc = jersfunc->getUncertainty(false);
+              jer_sf -= unc * (1 + jersfuncscale);
+            }
 
-	     }
+            if (debug)
+              cout << "JER unc is " << unc << " and sf is " << jer_sf << endl;
+          }
 
-	   }
-	   else {
-	     if (jersfvariation == "up") jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::UP);
-	     else if (jersfvariation == "down") jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::DOWN);
-	     else jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::NOMINAL);
-	   }
-	   
-	   float jersfcorr = 1;
-
-	   if (refdrjt[j] != -999 and refdrjt[j] < 0.2 and abs((jtpt[j]-jtpt_gen[j])) < 3*jet_resolution*jtpt[j] ) {
-	     jersfcorr += (jer_sf-1)*(jtpt[j]-jtpt_gen[j])/jtpt[j];
-	     //	     cout << "We use scaling method " <<  abs((jtpt[j]-jtpt_gen[j])) << endl;
-	   }
-	   else {
-	     //	     cout << "We use stochastic method " <<  abs((jtpt[j]-jtpt_gen[j])) << endl;
-	     _mersennetwister = std::mt19937(_seed);
-	     //	     double sigma = std::sqrt(std::max(jer_sf*jer_sf - 1,0)); // technically should be max(sf*sf-1,0)
-	     std::normal_distribution<> d(0, jet_resolution);
-	     if (jer_sf*jer_sf > 1) jersfcorr += d(_mersennetwister)*std::sqrt(jer_sf*jer_sf-1);
-	     else jersfcorr += d(_mersennetwister)*std::sqrt(0);
-
-	   }
-	   
-	   //  cout << "jet resolution: " << jet_resolution << " SF " << jer_sf << " eta: " << jteta[j] << " corr:  " << jersfcorr << " reco: " << jtpt[j] << " gen " << jtpt_gen[j] << " matching " << refdrjt[j] <<  endl;
-	   jtpt[j] *= jersfcorr;
-	 }
-
-     }
-     int ind1 = -1, ind2 = -1, ind3 = -1;
-     int ind[10] = {0, 1, -1, -1, -1, -1, -1, -1, -1, -1};
-
-     // Please fix me to be smarter; looking for the indices of tje 3 hardest jets after redoing JER SF and JEC:
-     if (nref > 1) {
-   
-       // Find highest pt
-       float highestpt = 0;
-       for (int scan = 0; scan < nref; scan ++) {
-	 if (passjetid[scan] == 1)  {
-	   if (jtpt[scan] > highestpt) {
-	     highestpt = jtpt[scan];
-	     ind[0] = scan;
-	   }
-	 }
-       }
-
-       // Second highest
-       float sechighestpt = 0;
-       for (int scan = 0; scan < nref; scan ++) {
-	 if (passjetid[scan] == 1)  {
-	   if (jtpt[scan] < highestpt and jtpt[scan] > sechighestpt) {
-	     sechighestpt = jtpt[scan];
-	     ind[1] = scan;
-	   }
-	 }
-       }
-
-       // Third
-       float thirhighestpt = 0;
-       for (int scan = 0; scan < nref; scan ++) {
-	 if (passjetid[scan] == 1)  {
-	   if (jtpt[scan] < sechighestpt and jtpt[scan] > thirhighestpt) {
-	     thirhighestpt = jtpt[scan];
-	     ind[2] = scan;
-	   }
-	 }
-       }
-
-      
-       if (ind[1] == -1) continue; // Ditch events with only 1 good jet
-       if (jtpt[ind[2]] < jtptlimitforalpha) continue;
-       if (jtpt[ind[0]] < jtptmin or jtpt[ind[1]] < jtptmin) continue; // Didn't find dijets with good pt
-
-       int probeind = 0;
-       int tagind = -1;
-
-       if (applyjetvetomap) {
-	 if (vetomap->GetBinContent(vetomap->FindBin(jteta[0],jtphi[0])) > 0 or vetomap->GetBinContent(vetomap->FindBin(jteta[1],jtphi[1])) > 0) continue;
-       }
-
-       
-       if (fillforJER) { // For JER SF studies the tag and probe need to be in the same bin of eta
-          const auto rand = r.Rndm();
-          if (rand < 0.5) { tagind = ind[1]; probeind = ind[0]; }
-          else  { tagind = ind[0];  probeind = ind[1];}
-          
-       }
-       // For residual JEC tag has to be in the barrel, probe can be anywhere
-       else {
-        if (abs(jteta[ind[0]]) > 1.3 and abs(jteta[ind[1]]) <= 1.3) { tagind = ind[1]; probeind = ind[0]; }
-        else if (abs(jteta[ind[1]]) > 1.3 and abs(jteta[ind[0]]) <= 1.3)  { tagind = ind[0];  probeind = ind[1]; }
-
-        else if (abs(jteta[ind[0]]) <= 1.3 and abs(jteta[ind[1]]) <= 1.3)  {
-          const auto rand = r.Rndm();
-          if (rand < 0.5) { tagind = ind[1]; probeind = ind[0]; }
-          else  { tagind = ind[0];  probeind = ind[1];}
+        } else {
+          if (jersfvariation == "up")
+            jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]},
+                                              {JME::Binning::JetPt, jtpt[j]}},
+                                             Variation::UP);
+          else if (jersfvariation == "down")
+            jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]},
+                                              {JME::Binning::JetPt, jtpt[j]}},
+                                             Variation::DOWN);
+          else
+            jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]},
+                                              {JME::Binning::JetPt, jtpt[j]}},
+                                             Variation::NOMINAL);
         }
-       }
 
-       if (tagind < 0 || probeind < 0) continue;
+        float jersfcorr = 1;
 
-       tagpt = jtpt[tagind];
-       probept = jtpt[probeind];
+        if (refdrjt[j] != -999 and refdrjt[j] < 0.2 and
+            abs((jtpt[j] - jtpt_gen[j])) < 3 * jet_resolution * jtpt[j]) {
+          jersfcorr += (jer_sf - 1) * (jtpt[j] - jtpt_gen[j]) / jtpt[j];
+          //	     cout << "We use scaling method " <<
+          //abs((jtpt[j]-jtpt_gen[j])) << endl;
+        } else {
+          //	     cout << "We use stochastic method " <<
+          //abs((jtpt[j]-jtpt_gen[j])) << endl;
+          _mersennetwister = std::mt19937(_seed);
+          //	     double sigma = std::sqrt(std::max(jer_sf*jer_sf - 1,0)); //
+          //technically should be max(sf*sf-1,0)
+          std::normal_distribution<> d(0, jet_resolution);
+          if (jer_sf * jer_sf > 1)
+            jersfcorr += d(_mersennetwister) * std::sqrt(jer_sf * jer_sf - 1);
+          else
+            jersfcorr += d(_mersennetwister) * std::sqrt(0);
+        }
 
-       tageta = jteta[tagind];
-       probeeta = jteta[probeind];
+        //  cout << "jet resolution: " << jet_resolution << " SF " << jer_sf <<
+        //  " eta: " << jteta[j] << " corr:  " << jersfcorr << " reco: " <<
+        //  jtpt[j] << " gen " << jtpt_gen[j] << " matching " << refdrjt[j] <<
+        //  endl;
+        jtpt[j] *= jersfcorr;
+      }
+    }
+    int ind1 = -1, ind2 = -1, ind3 = -1;
+    int ind[10] = {0, 1, -1, -1, -1, -1, -1, -1, -1, -1};
 
-       if (isMC) {
-         tagpt_gen = jtpt_gen[tagind];
-         probept_gen = jtpt_gen[probeind];
+    // Please fix me to be smarter; looking for the indices of tje 3 hardest
+    // jets after redoing JER SF and JEC:
+    if (nref > 1) {
 
-         tageta_gen = jteta_gen[tagind];
-         probeeta_gen = jteta_gen[probeind];
-       }
+      // Find highest pt
+      float highestpt = 0;
+      for (int scan = 0; scan < nref; scan++) {
+        if (passjetid[scan] == 1) {
+          if (jtpt[scan] > highestpt) {
+            highestpt = jtpt[scan];
+            ind[0] = scan;
+          }
+        }
+      }
 
-       float dphitp = DPhi(jtphi[tagind],jtphi[probeind]);
+      // Second highest
+      float sechighestpt = 0;
+      for (int scan = 0; scan < nref; scan++) {
+        if (passjetid[scan] == 1) {
+          if (jtpt[scan] < highestpt and jtpt[scan] > sechighestpt) {
+            sechighestpt = jtpt[scan];
+            ind[1] = scan;
+          }
+        }
+      }
 
-       ptavgtp = 0.5*(tagpt  + probept);
-       asymmtp = probept - tagpt;
+      // Third
+      float thirhighestpt = 0;
+      for (int scan = 0; scan < nref; scan++) {
+        if (passjetid[scan] == 1) {
+          if (jtpt[scan] < sechighestpt and jtpt[scan] > thirhighestpt) {
+            thirhighestpt = jtpt[scan];
+            ind[2] = scan;
+          }
+        }
+      }
 
-       if (isMC) {
-         ptavgtp_gen = 0.5*(tagpt_gen  + probept_gen);
-         asymmtp_gen = probept_gen - tagpt_gen;
-       }
-       
-       
-       if (ind[2] != -1) alpha = jtpt[ind[2]]/ptavgtp;
-       else alpha = 0; // In case of only two jets
+      if (ind[1] == -1)
+        continue; // Ditch events with only 1 good jet
+      if (jtpt[ind[2]] < jtptlimitforalpha)
+        continue;
+      if (jtpt[ind[0]] < jtptmin or jtpt[ind[1]] < jtptmin)
+        continue; // Didn't find dijets with good pt
 
+      int probeind = 0;
+      int tagind = -1;
 
-      if (ind[2] != -1 && jtpt[ind[2]] < jtptlimitforalpha) continue;
-     
-       for (auto &histrange : _histos) { 
-	   for (auto &h : histrange.second) {
-	     
-	     if (tageta >= h->etamin and tageta < h->etamax and probeeta >= h->etamin and probeeta < h->etamax and hiBin >= h->hibinmin and hiBin < h->hibinmax and dphitp > 2.7  and nref >= 2 and tagind > -1) {
-	       
-	       // This is the full eta range
-	       if ((h->etamin - h->etamax) < -10) {
-		 h->alphas->Fill(alpha,evtwt);
-		 
-		 h->probe_pt->Fill(probept,evtwt);
-		 h->probe_eta->Fill(probeeta,evtwt);
-		 h->tag_pt->Fill(tagpt,evtwt);
-		 h->tag_eta->Fill(tageta,evtwt);
-		 
-		 if (HLT_ZB) h->HLTZB_ptav->Fill(ptavgtp, evtwt);
-		 if (HLT_40) h->HLT40_ptav->Fill(ptavgtp, evtwt);
-		 if (HLT_60) h->HLT60_ptav->Fill(ptavgtp, evtwt);
-		 if (HLT_100) h->HLT100_ptav->Fill(ptavgtp, evtwt);
-		 if (HLT_120) h->HLT120_ptav->Fill(ptavgtp, evtwt);
-		   
-		 h->asymmdist3D->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		 h->absasymmdist3D->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
+      if (applyjetvetomap) {
+        if (vetomap->GetBinContent(vetomap->FindBin(jteta[0], jtphi[0])) > 0 or
+            vetomap->GetBinContent(vetomap->FindBin(jteta[1], jtphi[1])) > 0)
+          continue;
+      }
 
-		 
-		 int probebin = h->asymmdist3D_a10->FindBin(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp);
-		 int tagbin = h->asymmdist3D_a10->FindBin(ptavgtp, abs(tageta), asymmtp/2./ptavgtp);
-		 //		 cout << " probebin " << probebin << " tagbin " << tagbin << " " << (probebin==tagbin) << endl;
-		 //              cout << abs(probeeta) << " " << abs(tageta) << endl;
-		 bool tagincorrecteta = (probebin == tagbin);    // For JER we want tag and probe in the same eta bin
-		 
-		 if (alpha < 0.1)   {
-		   if (tagincorrecteta) h->asymmdist3D_a10->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a10->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a10) h->absasymmdist3D_gen_a10->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
-		   
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.1-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.1-0.0001, asymmtp/2./ptavgtp, evtwt);
+      if (fillforJER) { // For JER SF studies the tag and probe need to be in
+                        // the same bin of eta
+        const auto rand = r.Rndm();
+        if (rand < 0.5) {
+          tagind = ind[1];
+          probeind = ind[0];
+        } else {
+          tagind = ind[0];
+          probeind = ind[1];
+        }
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.1-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.1-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.1-0.0001, asymmtp/2./ptavgtp, evtwt);
- 
-		   h->dijetasymmetry2D_a01->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		 }
+      }
+      // For residual JEC tag has to be in the barrel, probe can be anywhere
+      else {
+        if (abs(jteta[ind[0]]) > 1.3 and abs(jteta[ind[1]]) <= 1.3) {
+          tagind = ind[1];
+          probeind = ind[0];
+        } else if (abs(jteta[ind[1]]) > 1.3 and abs(jteta[ind[0]]) <= 1.3) {
+          tagind = ind[0];
+          probeind = ind[1];
+        }
 
-		 if (alpha < 0.15) {
-		   if (tagincorrecteta) h->asymmdist3D_a15->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a15->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a15) h->absasymmdist3D_gen_a15->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+        else if (abs(jteta[ind[0]]) <= 1.3 and abs(jteta[ind[1]]) <= 1.3) {
+          const auto rand = r.Rndm();
+          if (rand < 0.5) {
+            tagind = ind[1];
+            probeind = ind[0];
+          } else {
+            tagind = ind[0];
+            probeind = ind[1];
+          }
+        }
+      }
 
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.15-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.15-0.0001, asymmtp/2./ptavgtp, evtwt);
+      if (tagind < 0 || probeind < 0)
+        continue;
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.15-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.15-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.15-0.0001, asymmtp/2./ptavgtp, evtwt);
-}
-		 if (alpha < 0.2)  {
-		   if (tagincorrecteta) h->asymmdist3D_a20->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a20->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a20) h->absasymmdist3D_gen_a20->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+      tagpt = jtpt[tagind];
+      probept = jtpt[probeind];
 
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.2-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.2-0.0001, asymmtp/2./ptavgtp, evtwt);
+      tageta = jteta[tagind];
+      probeeta = jteta[probeind];
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.2-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.2-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.2-0.0001, asymmtp/2./ptavgtp, evtwt);
+      if (isMC) {
+        tagpt_gen = jtpt_gen[tagind];
+        probept_gen = jtpt_gen[probeind];
 
-		   h->dijetasymmetry2D_a02->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		 }
+        tageta_gen = jteta_gen[tagind];
+        probeeta_gen = jteta_gen[probeind];
+      }
 
-		 if (alpha < 0.25) {
-		   if (tagincorrecteta) h->asymmdist3D_a25->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a25->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a25) h->absasymmdist3D_gen_a25->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+      float dphitp = DPhi(jtphi[tagind], jtphi[probeind]);
 
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.25-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.25-0.0001, asymmtp/2./ptavgtp, evtwt);
+      ptavgtp = 0.5 * (tagpt + probept);
+      asymmtp = probept - tagpt;
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.25-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.25-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.25-0.0001, asymmtp/2./ptavgtp, evtwt);
+      if (isMC) {
+        ptavgtp_gen = 0.5 * (tagpt_gen + probept_gen);
+        asymmtp_gen = probept_gen - tagpt_gen;
+      }
 
-		 }
-		 if (alpha < 0.3)  {
-		   if (tagincorrecteta) h->asymmdist3D_a30->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a30->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a30) h->absasymmdist3D_gen_a30->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+      if (ind[2] != -1)
+        alpha = jtpt[ind[2]] / ptavgtp;
+      else
+        alpha = 0; // In case of only two jets
 
-		   h->dijetbalance_a03->Fill(asymmtp/2./ptavgtp, evtwt);
+      if (ind[2] != -1 && jtpt[ind[2]] < jtptlimitforalpha)
+        continue;
 
-		   if (ptavgtp >= 30 and ptavgtp < 40) h->dijetbalance_a03_pt30to40->Fill(abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (ptavgtp >= 40 and ptavgtp < 80) h->dijetbalance_a03_pt40to80->Fill(abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   
-		   h->dijetasymmetry2D_a03->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry_a03->Fill(ptavgtp, asymmtp/2./ptavgtp, evtwt);
+      for (auto &histrange : _histos) {
+        for (auto &h : histrange.second) {
 
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.3-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.3-0.0001, asymmtp/2./ptavgtp, evtwt);
+          if (tageta >= h->etamin and tageta < h->etamax and
+              probeeta >= h->etamin and probeeta < h->etamax and
+              hiBin >= h->hibinmin and hiBin < h->hibinmax and dphitp > 2.7 and
+              nref >= 2 and tagind > -1) {
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.3-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.3-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.3-0.0001, asymmtp/2./ptavgtp, evtwt);
+            // This is the full eta range
+            if ((h->etamin - h->etamax) < -10) {
+              h->alphas->Fill(alpha, evtwt);
 
-		   h->jet_nef->Fill(probept,jtnef[probeind],evtwt);
-		   h->jet_cef->Fill(probept,jtcef[probeind],evtwt);
-		   h->jet_nhf->Fill(probept,jtnhf[probeind],evtwt);
-		   h->jet_chf->Fill(probept,jtchf[probeind],evtwt);
-		   h->jet_muf->Fill(probept,jtmuf[probeind],evtwt);       
+              h->probe_pt->Fill(probept, evtwt);
+              h->probe_eta->Fill(probeeta, evtwt);
+              h->tag_pt->Fill(tagpt, evtwt);
+              h->tag_eta->Fill(tageta, evtwt);
 
-		 }
-		 //else if (alpha < 0.35)   h->dijetasymmetry2D_a035->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		 if (alpha < 0.35) {
-		   if (tagincorrecteta) h->asymmdist3D_a35->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a35->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a35) h->absasymmdist3D_gen_a35->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+              if (HLT_ZB)
+                h->HLTZB_ptav->Fill(ptavgtp, evtwt);
+              if (HLT_40)
+                h->HLT40_ptav->Fill(ptavgtp, evtwt);
+              if (HLT_60)
+                h->HLT60_ptav->Fill(ptavgtp, evtwt);
+              if (HLT_100)
+                h->HLT100_ptav->Fill(ptavgtp, evtwt);
+              if (HLT_120)
+                h->HLT120_ptav->Fill(ptavgtp, evtwt);
 
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.35-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.35-0.0001, asymmtp/2./ptavgtp, evtwt);
+              h->asymmdist3D->Fill(ptavgtp, abs(probeeta),
+                                   asymmtp / 2. / ptavgtp, evtwt);
+              h->absasymmdist3D->Fill(ptavgtp, abs(probeeta),
+                                      abs(asymmtp / 2. / ptavgtp), evtwt);
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.35-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.35-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.35-0.0001, asymmtp/2./ptavgtp, evtwt);
+              int probebin = h->asymmdist3D_a10->FindBin(
+                  ptavgtp, abs(probeeta), asymmtp / 2. / ptavgtp);
+              int tagbin = h->asymmdist3D_a10->FindBin(ptavgtp, abs(tageta),
+                                                       asymmtp / 2. / ptavgtp);
+              //		 cout << " probebin " << probebin << " tagbin "
+              //<< tagbin << " " << (probebin==tagbin) << endl;
+              //              cout << abs(probeeta) << " " << abs(tageta) <<
+              //              endl;
+              bool tagincorrecteta =
+                  (probebin ==
+                   tagbin); // For JER we want tag and probe in the same eta bin
 
-		 }
-		 if (alpha < 0.4)   {
-		   if (tagincorrecteta) h->asymmdist3D_a40->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a40->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a40) h->absasymmdist3D_gen_a40->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+              if (alpha < 0.1) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a10->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a10->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a10)
+                  h->absasymmdist3D_gen_a10->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
 
-		   h->dijetasymmetry2D_a04->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.4-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.4-0.0001, asymmtp/2./ptavgtp, evtwt);
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.1 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.1 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.4-0.0001, asymmtp/2./ptavgtp, evtwt); 
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.4-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.4-0.0001, asymmtp/2./ptavgtp, evtwt);
-		 }
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.1 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.1 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.1 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
 
-		 if (alpha < 0.45) {
-		   if (tagincorrecteta) h->asymmdist3D_a45->Fill(ptavgtp, abs(probeeta), asymmtp/2./ptavgtp, evtwt);
-		   if (tagincorrecteta) h->absasymmdist3D_a45->Fill(ptavgtp, abs(probeeta), abs(asymmtp/2./ptavgtp), evtwt);
-       if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a45) h->absasymmdist3D_gen_a45->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
+                h->dijetasymmetry2D_a01->Fill(ptavgtp, probeeta,
+                                              asymmtp / 2. / ptavgtp, evtwt);
+              }
 
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.45-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.45-0.0001, asymmtp/2./ptavgtp, evtwt);
+              if (alpha < 0.15) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a15->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a15->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a15)
+                  h->absasymmdist3D_gen_a15->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.45-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.45-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.45-0.0001, asymmtp/2./ptavgtp, evtwt);
-		 }
-		 
-		 if (alpha < 0.5) {
-		   h->dijetasymmetry2D_a05->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.5-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.5-0.0001, asymmtp/2./ptavgtp, evtwt);
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.15 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.15 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
 
-		   h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.5-0.0001, asymmtp/2./ptavgtp, evtwt); 
-		   h->dijetasymmetry3Dabsetanarrow->Fill(ptavgtp, abs(probeeta), 0.5-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.5-0.0001, asymmtp/2./ptavgtp, evtwt);
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta,
+                                                0.15 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.15 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.15 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+              if (alpha < 0.2) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a20->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a20->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a20)
+                  h->absasymmdist3D_gen_a20->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
 
-		 }
-		 if (alpha < 0.6) {
-		   //		   h->dijetasymmetry2D_a06->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
-		   //		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.6-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta), 0.6-0.0001, asymmtp/2./ptavgtp, evtwt);
-		   h->dijetasymmetry3Dabsetawide->Fill(ptavgtp, abs(probeeta), 0.6-0.0001, asymmtp/2./ptavgtp, evtwt);
-		 }
-	       }
-		 // Second: alpha < 1
-		 h->dijetbalance_a1->Fill(asymmtp/2./ptavgtp, evtwt);
-		 h->dijetasymmetry_a1->Fill(ptavgtp, asymmtp/2./ptavgtp, evtwt);
-	     }
-	   }
-	 } 
-     }
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.2 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.2 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
 
-	 for (int j = 0; j < nref; ++j ) {
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.2 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.2 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.2 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
 
-	 for (auto &histrange : _histos) {
-	   for (auto &h : histrange.second) {
+                h->dijetasymmetry2D_a02->Fill(ptavgtp, probeeta,
+                                              asymmtp / 2. / ptavgtp, evtwt);
+              }
 
-	     if (jteta[j] >= h->etamin and jteta[j] < h->etamax and hiBin >= h->hibinmin and hiBin < h->hibinmax) {
+              if (alpha < 0.25) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a25->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a25->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a25)
+                  h->absasymmdist3D_gen_a25->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
 
-	       if (checkjetid and passjetid[j] == 0) continue;
-	       
-	       h->jetetaphi->Fill(jteta[j],jtphi[j],weight);
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.25 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.25 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
 
-	       
-	       if (j == 0 and passjetid[0]) {
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta,
+                                                0.25 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.25 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.25 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+              if (alpha < 0.3) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a30->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a30->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a30)
+                  h->absasymmdist3D_gen_a30->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
 
-		 // Trigger checks; leading jet pt
-		 if (HLT_ZB) h->HLTZB->Fill(jtpt[ind[0]],evtwt);
+                h->dijetbalance_a03->Fill(asymmtp / 2. / ptavgtp, evtwt);
 
-		 if (HLT_40) h->HLT40->Fill(jtpt[ind[0]],evtwt);
-		 if (HLT_60) h->HLT60->Fill(jtpt[ind[0]],evtwt);
-		 if (HLT_80) h->HLT80->Fill(jtpt[ind[0]],evtwt);
-		 if (HLT_100) h->HLT100->Fill(jtpt[ind[0]],evtwt);
-		 if (HLT_120) { h->HLT120->Fill(jtpt[ind[0]],evtwt);}
+                if (ptavgtp >= 30 and ptavgtp < 40)
+                  h->dijetbalance_a03_pt30to40->Fill(
+                      abs(probeeta), asymmtp / 2. / ptavgtp, evtwt);
+                if (ptavgtp >= 40 and ptavgtp < 80)
+                  h->dijetbalance_a03_pt40to80->Fill(
+                      abs(probeeta), asymmtp / 2. / ptavgtp, evtwt);
 
-	       }
+                h->dijetasymmetry2D_a03->Fill(ptavgtp, probeeta,
+                                              asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry_a03->Fill(ptavgtp, asymmtp / 2. / ptavgtp,
+                                            evtwt);
 
-	       h->jet_pt->Fill(jtpt[j],evtwt);
-	       h->jet_pt_now->Fill(jtpt[j],1);
-	       h->jet_uncorr_pt->Fill(jtpt_uncorr[j],evtwt);
-	       h->jet_pt_genweight->Fill(jtpt[j],weight);
-	       h->jet_eta->Fill(jteta[j],evtwt);
-	       h->jet_phi->Fill(jtphi[j],evtwt);
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.3 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.3 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
 
-	       if (isMC) {
-	     
-		 h->genjet_pt->Fill(jtpt_gen[j],evtwt);
-		 h->genjet_eta->Fill(jteta_gen[j],evtwt);
-		 h->genjet_phi->Fill(jtphi_gen[j],evtwt);
-		 
-		 h->jetresponse->Fill(jtpt_gen[j],jtpt[j]/jtpt_gen[j],evtwt);
-	     
-		 h->ptres->Fill((jtpt[j]-jtpt_gen[j])/jtpt_gen[j],evtwt);
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.3 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.3 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.3 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
 
-		 h->ptgenvsptreco->Fill(jtpt_gen[j],jtpt[j],evtwt);
-		 h->ptrecovsweight->Fill(jtpt[j],weight);
-		 h->ptgenvsweight->Fill(jtpt_gen[j],weight);
+                h->jet_nef->Fill(probept, jtnef[probeind], evtwt);
+                h->jet_cef->Fill(probept, jtcef[probeind], evtwt);
+                h->jet_nhf->Fill(probept, jtnhf[probeind], evtwt);
+                h->jet_chf->Fill(probept, jtchf[probeind], evtwt);
+                h->jet_muf->Fill(probept, jtmuf[probeind], evtwt);
+              }
+              // else if (alpha < 0.35) h->dijetasymmetry2D_a035->Fill(ptavgtp,
+              // probeeta, asymmtp/2./ptavgtp, evtwt);
+              if (alpha < 0.35) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a35->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a35->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a35)
+                  h->absasymmdist3D_gen_a35->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
 
-		 h->responses3D->Fill(jtpt_gen[j], jteta_gen[j], jtpt[j]/jtpt_gen[j], evtwt);
-		 h->phiresponse->Fill(jtpt_gen[j], jteta_gen[j], jtphi[j]-jtphi_gen[j], evtwt);
-		 h->etaresponse->Fill(jtpt_gen[j], jteta_gen[j], jteta[j]-jteta_gen[j], evtwt);
-		 
-	       }
-	     }
-	   }
-	 }
-     }    
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.35 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.35 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta,
+                                                0.35 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.35 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.35 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+              if (alpha < 0.4) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a40->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a40->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a40)
+                  h->absasymmdist3D_gen_a40->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
+
+                h->dijetasymmetry2D_a04->Fill(ptavgtp, probeeta,
+                                              asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.4 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.4 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.4 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.4 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.4 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+
+              if (alpha < 0.45) {
+                if (tagincorrecteta)
+                  h->asymmdist3D_a45->Fill(ptavgtp, abs(probeeta),
+                                           asymmtp / 2. / ptavgtp, evtwt);
+                if (tagincorrecteta)
+                  h->absasymmdist3D_a45->Fill(ptavgtp, abs(probeeta),
+                                              abs(asymmtp / 2. / ptavgtp),
+                                              evtwt);
+                if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a45)
+                  h->absasymmdist3D_gen_a45->Fill(
+                      ptavgtp_gen, abs(probeeta_gen),
+                      abs(asymmtp_gen / 2. / ptavgtp_gen), evtwt);
+
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.45 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.45 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta,
+                                                0.45 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.45 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.45 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+
+              if (alpha < 0.5) {
+                h->dijetasymmetry2D_a05->Fill(ptavgtp, probeeta,
+                                              asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3D->Fill(ptavgtp, probeeta, 0.5 - 0.0001,
+                                          asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.5 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+
+                h->dijetasymmetry3Dnarrow->Fill(ptavgtp, probeeta, 0.5 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetanarrow->Fill(
+                    ptavgtp, abs(probeeta), 0.5 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.5 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+              if (alpha < 0.6) {
+                //		   h->dijetasymmetry2D_a06->Fill(ptavgtp,
+                //probeeta, asymmtp/2./ptavgtp, evtwt);
+                //		   h->dijetasymmetry3D->Fill(ptavgtp, probeeta,
+                //0.6-0.0001, asymmtp/2./ptavgtp, evtwt);
+                h->dijetasymmetry3Dabseta->Fill(ptavgtp, abs(probeeta),
+                                                0.6 - 0.0001,
+                                                asymmtp / 2. / ptavgtp, evtwt);
+                h->dijetasymmetry3Dabsetawide->Fill(
+                    ptavgtp, abs(probeeta), 0.6 - 0.0001,
+                    asymmtp / 2. / ptavgtp, evtwt);
+              }
+            }
+            // Second: alpha < 1
+            h->dijetbalance_a1->Fill(asymmtp / 2. / ptavgtp, evtwt);
+            h->dijetasymmetry_a1->Fill(ptavgtp, asymmtp / 2. / ptavgtp, evtwt);
+          }
+        }
+      }
+    }
+
+    for (int j = 0; j < nref; ++j) {
+
+      for (auto &histrange : _histos) {
+        for (auto &h : histrange.second) {
+
+          if (jteta[j] >= h->etamin and jteta[j] < h->etamax and
+              hiBin >= h->hibinmin and hiBin < h->hibinmax) {
+
+            if (checkjetid and passjetid[j] == 0)
+              continue;
+
+            h->jetetaphi->Fill(jteta[j], jtphi[j], weight);
+
+            if (j == 0 and passjetid[0]) {
+
+              // Trigger checks; leading jet pt
+              if (HLT_ZB)
+                h->HLTZB->Fill(jtpt[ind[0]], evtwt);
+
+              if (HLT_40)
+                h->HLT40->Fill(jtpt[ind[0]], evtwt);
+              if (HLT_60)
+                h->HLT60->Fill(jtpt[ind[0]], evtwt);
+              if (HLT_80)
+                h->HLT80->Fill(jtpt[ind[0]], evtwt);
+              if (HLT_100)
+                h->HLT100->Fill(jtpt[ind[0]], evtwt);
+              if (HLT_120) {
+                h->HLT120->Fill(jtpt[ind[0]], evtwt);
+              }
+            }
+
+            h->jet_pt->Fill(jtpt[j], evtwt);
+            h->jet_pt_now->Fill(jtpt[j], 1);
+            h->jet_uncorr_pt->Fill(jtpt_uncorr[j], evtwt);
+            h->jet_pt_genweight->Fill(jtpt[j], weight);
+            h->jet_eta->Fill(jteta[j], evtwt);
+            h->jet_phi->Fill(jtphi[j], evtwt);
+
+            if (isMC) {
+
+              h->genjet_pt->Fill(jtpt_gen[j], evtwt);
+              h->genjet_eta->Fill(jteta_gen[j], evtwt);
+              h->genjet_phi->Fill(jtphi_gen[j], evtwt);
+
+              h->jetresponse->Fill(jtpt_gen[j], jtpt[j] / jtpt_gen[j], evtwt);
+
+              h->ptres->Fill((jtpt[j] - jtpt_gen[j]) / jtpt_gen[j], evtwt);
+
+              h->ptgenvsptreco->Fill(jtpt_gen[j], jtpt[j], evtwt);
+              h->ptrecovsweight->Fill(jtpt[j], weight);
+              h->ptgenvsweight->Fill(jtpt_gen[j], weight);
+
+              h->responses3D->Fill(jtpt_gen[j], jteta_gen[j],
+                                   jtpt[j] / jtpt_gen[j], evtwt);
+              h->phiresponse->Fill(jtpt_gen[j], jteta_gen[j],
+                                   jtphi[j] - jtphi_gen[j], evtwt);
+              h->etaresponse->Fill(jtpt_gen[j], jteta_gen[j],
+                                   jteta[j] - jteta_gen[j], evtwt);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Write output histograms
-  
+
   for (auto &histrange : _histos) {
     for (auto &h : histrange.second) {
       h->Write();
-    }  
+    }
   }
   eh->Write();
- 
+
   cout << "Wrote " << outputfilename.c_str() << endl;
- 
- }
+}
