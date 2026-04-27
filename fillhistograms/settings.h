@@ -6,15 +6,15 @@
 //string jecfile = "jecfiles/2023ppwithpbpb_old_MC_L2Relative_AK4PF.txt";
 string jecfile = "jecfiles/2024ppRef_withPU_L2Relative_AK4PF.txt";
 string MCjecfile = "jecfiles/2024ppRef_withPU_L2Relative_AK4PF.txt";
-//string l2file = "jecfiles/L2Residuals_2024ppRef_fixed.txt";
-string l2file = "";
+string l2file = "jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt";
 //string l2file = "jecfiles/Spring23_HI_V1_DATA_L2Residual_AK4PFCHS.txt";
 
 // JER
 string resolutionFile = "jecfiles/MCjerparams-vetoall.txt";
-string scaleFactorFile = "jecfiles/JERSF_fromRMS_chs_vetoall.txt";
+//string scaleFactorFile = "jecfiles/JERSF_fromRMS_chs_vetoall.txt";
+string scaleFactorFile = "jecfiles/Summer23Prompt23_RunCv4_JRV1m_MC_SF_AK4PFPuppi.txt";
 
-// Jet veto map - how to implement?
+// Jet veto map
 TString vetomapFile = "jecfiles/";
 
 

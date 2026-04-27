@@ -14,9 +14,9 @@
 #include "../fillhistograms/histograms.h"
 
 void deriveL3_from_photonjet(
-    TString mcFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONMC_AK4_photonjet.root",
-    TString dataFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONHP_AK4_photonjet.root",
-    TString outfilename = "L3Residual_PhotonJet.root",
+    TString mcFile = "/eos/home-z/zzaidanc/JetMinPOG/L3ResZJet/ZJETMC_AK4_zjet_ak4.root",
+    TString dataFile = "/eos/home-z/zzaidanc/JetMinPOG/L3ResZJet/ZJETSM_AK4_zjet_ak4.root",
+    TString outfilename = "L3Residual_ZJet.root",
     bool dodt = true,
     int alphabin = 5,
     bool useabs = true,
@@ -64,10 +64,10 @@ void deriveL3_from_photonjet(
     aerrormc = new TH1D("aerrormc", "MC error; |#eta_{jet}|; error", histograms::nwabsetas, &histograms::wabsetarange[0]);
     aerrordt = new TH1D("aerrordt", "Data error; |#eta_{jet}|; error", histograms::nwabsetas, &histograms::wabsetarange[0]);
 
-    mc3d[etabins[i].c_str()] = (TProfile3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabseta");
-    data3d[etabins[i].c_str()] = (TProfile3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabseta");
-    counts_mc3d[etabins[i].c_str()] = (TH3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabseta_counts");
-    counts_data3d[etabins[i].c_str()] = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabseta_counts");
+    mc3d[etabins[i].c_str()] = (TProfile3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabseta");
+    data3d[etabins[i].c_str()] = (TProfile3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabseta");
+    counts_mc3d[etabins[i].c_str()] = (TH3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabseta_counts");
+    counts_data3d[etabins[i].c_str()] = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabseta_counts");
   }
   else if (usewideabs) {
     vseta_mc = new TH1D("vseta_mc", "MC balance; |#eta_{jet}|; balance", histograms::ndwabsetas, &histograms::dwabsetarange[0]);
@@ -75,10 +75,10 @@ void deriveL3_from_photonjet(
     aerrormc = new TH1D("aerrormc", "MC error; |#eta_{jet}|; error", histograms::ndwabsetas, &histograms::dwabsetarange[0]);
     aerrordt = new TH1D("aerrordt", "Data error; |#eta_{jet}|; error", histograms::ndwabsetas, &histograms::dwabsetarange[0]);
 
-    mc3d[etabins[i].c_str()] = (TProfile3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabsetawide");
-    data3d[etabins[i].c_str()] = (TProfile3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabsetawide");
-    counts_mc3d[etabins[i].c_str()] = (TH3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabsetawide_counts");
-    counts_data3d[etabins[i].c_str()] = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3Dabsetawide_counts");
+    mc3d[etabins[i].c_str()] = (TProfile3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabsetawide");
+    data3d[etabins[i].c_str()] = (TProfile3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabsetawide");
+    counts_mc3d[etabins[i].c_str()] = (TH3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabsetawide_counts");
+    counts_data3d[etabins[i].c_str()] = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3Dabsetawide_counts");
   }
   else {
     vseta_mc = new TH1D("vseta_mc", "MC balance; #eta_{jet}; balance", histograms::nwetas, &histograms::wetarange[0]);
@@ -86,19 +86,19 @@ void deriveL3_from_photonjet(
     aerrormc = new TH1D("aerrormc", "MC error; #eta_{jet}; error", histograms::nwetas, &histograms::wetarange[0]);
     aerrordt = new TH1D("aerrordt", "Data error; #eta_{jet}; error", histograms::nwetas, &histograms::wetarange[0]);
 
-    mc3d[etabins[i].c_str()] = (TProfile3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3D");
-    data3d[etabins[i].c_str()] = (TProfile3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3D");
-    counts_mc3d[etabins[i].c_str()] = (TH3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3D_counts");
-    counts_data3d[etabins[i].c_str()] = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/photonjet_balance3D_counts");
+    mc3d[etabins[i].c_str()] = (TProfile3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3D");
+    data3d[etabins[i].c_str()] = (TProfile3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3D");
+    counts_mc3d[etabins[i].c_str()] = (TH3D*)inFileMC->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3D_counts");
+    counts_data3d[etabins[i].c_str()] = (TH3D*)inFileDT->Get("hibin_-1.0_0.0/eta_-5.2_5.2/Muonjet_balance3D_counts");
   }
 
   // Check that histograms were found
   if (!mc3d[etabins[i].c_str()]) {
-    cout << "ERROR: Cannot find MC photon+jet balance histogram" << endl;
+    cout << "ERROR: Cannot find MC muon+jet balance histogram (Muonjet_balance3D*)" << endl;
     return;
   }
   if (!data3d[etabins[i].c_str()]) {
-    cout << "ERROR: Cannot find Data photon+jet balance histogram" << endl;
+    cout << "ERROR: Cannot find Data muon+jet balance histogram (Muonjet_balance3D*)" << endl;
     return;
   }
 

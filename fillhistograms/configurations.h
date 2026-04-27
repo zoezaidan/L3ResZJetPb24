@@ -23,11 +23,11 @@ map<string,string> filenames = {
 		   {"zb19", "/eos/user/l/lamartik/HIJEC_ZEROBIAS_TUPLES/zerobias19pbpb.root"},
 		   {"HP", "/eos/user/l/lamartik/run3_pprefpbpbreco_data_05072024.root"},
 		   {"MC", "/eos/cms/store/group/phys_heavyions/lamartik/tuples/MC_pprefwpbpbreco_privateforjec.root"},
-		   {"localHP", "testdata/run3_pprefpbpbreco_data_05072024.root"}, */
+		   {"localHP", "testdata/run3_pprefpbpbreco_data_05072024.root"}, 
 		   {"RERECOZB0", "/eos/user/l/lamartik/HIJECRERECO/zb0-2023-pbpbreco.root"},
-                   {"RERECOZB1", "/eos/user/l/lamartik/HIJECRERECO/zb1-2023-pbpbreco.root"},
-                   {"RERECOZB2", "/eos/user/l/lamartik/HIJECRERECO/zb2-2023-pbpbreco.root"},
-                   {"RERECOZB3", "/eos/user/l/lamartik/HIJECRERECO/zb3-2023-pbpbreco.root"},
+           {"RERECOZB1", "/eos/user/l/lamartik/HIJECRERECO/zb1-2023-pbpbreco.root"},
+           {"RERECOZB2", "/eos/user/l/lamartik/HIJECRERECO/zb2-2023-pbpbreco.root"},
+           {"RERECOZB3", "/eos/user/l/lamartik/HIJECRERECO/zb3-2023-pbpbreco.root"},
                    {"RERECOZB4", "/eos/user/l/lamartik/HIJECRERECO/zb4-2023-pbpbreco.root"},
                    {"RERECOZB5", "/eos/user/l/lamartik/HIJECRERECO/zb5-2023-pbpbreco.root"},
                    {"RERECOZB6", "/eos/user/l/lamartik/HIJECRERECO/zb6-2023-pbpbreco.root"},
@@ -46,10 +46,17 @@ map<string,string> filenames = {
                    {"RERECOZB19", "/eos/user/l/lamartik/HIJECRERECO/zb19-2023-pbpbreco.root"},
 		   {"RERECOHP", "/eos/user/l/lamartik/HIJECRERECO/HP2023-pbpbreco.root"},
 		   //		   {"RERECOMC", "/eos/user/l/lamartik/HIJECRERECO/MC2023-pbpbreco.root"}
-                   {"ZJETMC_0", "root://cms-xrd-global.cern.ch//store/user/mnguyen/JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/ZjetMadraph/260206_124018/0000/merged_HiForestMiniAOD.root"},
-                   {"ZJETDATA_0", "root://cms-xrd-global.cern.ch//store/user/mnguyen/JEC/PPRefSingleMuon0/SingleMuon0/merged_HiForestMiniAOD.root"},
-                   {"ZJETMC", "/afs/cern.ch/user/r/rdelliga/L3_Res_ZJet_2024PbPb/CMSSW_15_1_0_patch3/residualanalysis/fillhistograms/DYto2Mu_MLL-50_PbPb24_HiForestMiniAOD_MC_1.root"},
 		   {"RERECOMC", "/eos/user/l/lamartik/Run3_MC_pbpbrereco_202509/MC_pbpbreco_allppGT.root"} ,
 		   {"PHOTONHP", "/eos/cms/store/group/phys_heavyions/bharikri/Forest/JetCalibrations/2024ppRef_HP0_part_from_Nick/HP0_PP2024_1.root"},
-		   {"PHOTONMC", "/eos/cms/store/group/phys_heavyions/bharikri/Forest/JetCalibrations/2024ppRef_MC_dijet_part_from_Nick/DIJET_PP2024_p0.root"}  
-                 };
+		   {"PHOTONMC", "/eos/cms/store/group/phys_heavyions/bharikri/Forest/GammaJetSubstructure/2024_PP_MC/2026_01_18_Pythia8_2024_ppRef_QCDPhoton/QCD-Photon_pThat-15to9999_TuneCP5_5p36TeV_pythia8/crab_2026_01_18_Pythia8_2024_ppRef_QCDPhoton15/260118_082947/0000/HiForestMiniAOD_1.root"}
+		   */
+
+		{"ZJETMC_0", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/ZjetMadraph/260206_124018/0000/merged_HiForestMiniAOD.root"},
+		{"ZJETMC_1", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/ZjetMadraph/260206_124018/0001/merged_HiForestMiniAOD.root"},
+		{"ZJETMC_2", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/ZjetMadraph/260206_124018/0002/merged_HiForestMiniAOD.root"},
+		{"ZJETSM_0", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/PPRefSingleMuon0/SingleMuon0/merged_HiForestMiniAOD.root"},
+		{"ZJETSM_1", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/PPRefSingleMuon1/SingleMuon1/merged_HiForestMiniAOD.root"},
+		{"ZJETSM_2", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/PPRefSingleMuon2/SingleMuon2/merged_HiForestMiniAOD.root"},
+		{"ZJETSM_3", "root://cms-xrd-global.cern.ch//store/user/mnguyen//JEC/PPRefSingleMuon3/SingleMuon3/merged_HiForestMiniAOD.root"}
+	
+        };

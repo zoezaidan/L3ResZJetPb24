@@ -12,7 +12,7 @@
 // Analysis type enum for conditional histogram creation
 enum class AnalysisType {
   DIJET = 0,      // L2 Residual dijet analysis
-  PHOTONJET = 1,  // L3 Residual photon+jet analysis
+  ZJET = 1,  // L3 Residual Z+jet analysis
   ALL = 2         // Create all histograms (default, backward compatible)
 };
 
@@ -36,8 +36,7 @@ class histograms {
   TH1D* jet_pt_genweight;
   TH1D* jet_eta;
   TH1D* jet_phi;
-
-
+  
   TH1D* tag_pt;
   TH1D* tag_eta;
   TH1D* tag_phi;
@@ -46,6 +45,8 @@ class histograms {
   TH1D* probe_eta;
   TH1D* probe_phi;
 
+  TH1D* alphas;
+  
   // Trigger
   TH1D* HLTZB;
   TH1D* HLT40;
@@ -75,12 +76,12 @@ class histograms {
   TH1D* genjet_eta;
   TH1D* genjet_phi;
 
-  // Gen photon histograms (MC only)
-  TH1D* genphoton_pt;
-  TH1D* genphoton_eta;
-  TH1D* genphoton_phi;
-  TProfile* photonresponse;
-  TH1D* photon_ptres;
+  // Gen Z histograms (MC only)
+  TH1D* genMuon_pt;
+  TH1D* genMuon_eta;
+  TH1D* genMuon_phi;
+  TProfile* Muonresponse;
+  TH1D* Muon_ptres;
 
   TH1D* genjetdyn_kt;
   TH1D* genjetdyn_deltaR;
@@ -108,58 +109,60 @@ class histograms {
   TH1D* dijetdeltaphi;
   TH1D* dijetdeltaeta;
 
-// Photon+Jet histograms (L3 residual)
-  TH1D* photon_pt;
-  TH1D* photon_eta;
-  TH1D* photon_phi;
-  TH1D* photon_HoverE;
-  TH1D* photon_sigmaIetaIeta;
-  TH1D* photon_SwissCrx;
-  TH1D* photon_SeedTime;
+// Muon+Jet histograms (L3 residual)
+  TH1D* Muon_pt;
+  TH1D* Muon_eta;
+  TH1D* Muon_phi;
+  TH1D* Muon_HoverE;
+  TH1D* Muon_sigmaIetaIeta;
+  TH1D* Muon_SwissCrx;
+  TH1D* Muon_SeedTime;
 
   TH1D* awayside_jet_pt;
   TH1D* awayside_jet_eta;
   TH1D* awayside_jet_phi;
   TH1D* awayside_jet_uncorr_pt;
 
-  TH1D* photonjet_dphi;
-  TH1D* photonjet_balance;
-  TH1D* photonjet_ptavg;
-  TH1D* photonjet_alpha;
+  TH1D* Muonjet_dphi;
+  TH1D* Muonjet_balance;
+  TH1D* Muonjet_ptavg;
+  TH1D* Muonjet_alpha;
 
-  // Photon+Jet balance profiles (analogous to dijet asymmetry)
-  TProfile* photonjet_balance_a01;
-  TProfile* photonjet_balance_a02;
-  TProfile* photonjet_balance_a03;
-  TProfile* photonjet_balance_a04;
-  TProfile* photonjet_balance_a05;
-  TProfile* photonjet_balance_a06;
-
+  // Muon+Jet balance profiles (analogous to dijet asymmetry)
+  TProfile* Muonjet_balance_a01;
+  TProfile* Muonjet_balance_a02;
+  TProfile* Muonjet_balance_a03;
+  TProfile* Muonjet_balance_a04;
+  TProfile* Muonjet_balance_a05;
+  TProfile* Muonjet_balance_a06;
   // 2D profiles for L3 residual derivation
-  TProfile2D* photonjet_balance2D_a01;
-  TProfile2D* photonjet_balance2D_a02;
-  TProfile2D* photonjet_balance2D_a03;
-  TProfile2D* photonjet_balance2D_a04;
-  TProfile2D* photonjet_balance2D_a05;
-  TProfile2D* photonjet_balance2D_a06;
+  TProfile2D* Muonjet_balance2D_a01;
+  TProfile2D* Muonjet_balance2D_a02;
+  TProfile2D* Muonjet_balance2D_a03;
+  TProfile2D* Muonjet_balance2D_a04;
+  TProfile2D* Muonjet_balance2D_a05;
+  TProfile2D* Muonjet_balance2D_a06;
 
   // 3D profiles (reuse dijet binning: ptavg, jet eta, alpha)
-  TProfile3D* photonjet_balance3D;
-  TProfile3D* photonjet_balance3Dwide;
-  TProfile3D* photonjet_balance3Dnarrow;
-  TProfile3D* photonjet_balance3Dabseta;
-  TProfile3D* photonjet_balance3Dabsetawide;
-  TProfile3D* photonjet_balance3Dabsetanarrow;
-  TH3D* photonjet_balance3D_counts;
-  TH3D* photonjet_balance3Dwide_counts;
-  TH3D* photonjet_balance3Dnarrow_counts;
-  TH3D* photonjet_balance3Dabseta_counts;
-  TH3D* photonjet_balance3Dabsetawide_counts;
-  TH3D* photonjet_balance3Dabsetanarrow_counts;
+  TProfile3D* Muonjet_balance3D;
+  TProfile3D* Muonjet_balance3Dwide;
+  TProfile3D* Muonjet_balance3Dnarrow;
+  TProfile3D* Muonjet_balance3Dabseta;
+  TProfile3D* Muonjet_balance3Dabsetawide;
+  TProfile3D* Muonjet_balance3Dabsetanarrow;
+  TH3D* Muonjet_balance3D_counts;
+  TH3D* Muonjet_balance3Dwide_counts;
+  TH3D* Muonjet_balance3Dnarrow_counts;
+  TH3D* Muonjet_balance3Dabseta_counts;
+  TH3D* Muonjet_balance3Dabsetawide_counts;
+  TH3D* Muonjet_balance3Dabsetanarrow_counts;
+  // Balance distribution histogram (photon_pT, alpha, balance_value)
+  // No eta binning - for distribution analysis
+  TH3D* Muonjet_balance_dist;
 
-  // Photon trigger histograms
-  TH1D* HLTPhoton30;
-  TH1D* HLTPhoton30_ptav;
+  // Muon trigger histograms
+  TH1D* HLT_PPRefL2SingleMu12;
+  TH1D* HLT_PPRefL2SingleMu12_ptav;
 
 
 // JERC dijets
@@ -219,16 +222,20 @@ class histograms {
   TH3D* absasymmdist3D_a40;
   TH3D* asymmdist3D_a45;
   TH3D* absasymmdist3D_a45;
-  
-// PF composition?
-  
+
+  TH3D* absasymmdist3D_gen_a10;
+  TH3D* absasymmdist3D_gen_a15;
+  TH3D* absasymmdist3D_gen_a20;
+  TH3D* absasymmdist3D_gen_a25;
+  TH3D* absasymmdist3D_gen_a30;
+  TH3D* absasymmdist3D_gen_a35;
+  TH3D* absasymmdist3D_gen_a40;
+  TH3D* absasymmdist3D_gen_a45;
 
 // Weights etc
   TH2D* ptgenvsptreco;
   TH2D* ptrecovsweight;
   TH2D* ptgenvsweight;
-// Weight vs reco pT profile? scatter plot? reco pt vs weight and gen pt vs. weight?
-
 
   TDirectory *dir;
 
@@ -283,8 +290,10 @@ class histograms {
   //   static constexpr double ptforjec[] = {40, 60, 80, 100, 120, 140, 180, 220, 300, 500, 700, 5000};
   //  static constexpr double ptforjec[] = {40, 55, 80, 120, 170, 1000};
   //  static constexpr double ptforjec[] = {15 , 25, 55, 80, 120, 170, 1000};   // Low pT as Nick
-    // static constexpr double ptforjec[] = {15, 25, 80, 120, 1000};   // Low pT as Nick
-  static constexpr double ptforjec[] = {60, 70, 80, 90, 100, 120, 140, 160, 200, 300}; // Photon pT bins Bharad
+  // static constexpr double ptforjec[] = {15, 25, 80, 120, 1000};   // Low pT as Nick   - for eta,pT binned
+  
+  // static constexpr double ptforjec[] = {15 , 25, 40, 60, 80, 120, 1000};      // More bins in ZB 
+  static constexpr double ptforjec[] = {60, 65, 70, 75, 80, 85, 90, 100, 110, 120, 140, 160, 200, 250, 300, 400, 500, 700}; // Photon pT bins Bharad
   static constexpr unsigned int nptforjec = sizeof(ptforjec)/sizeof(ptforjec[0])-1;
 
   //  static constexpr double ptforJER[] = {15, 21, 28, 37, 49, 64, 84, 114, 153, 196, 245, 300, 362, 430, 507, 592, 686, 790, 905, 1032, 2238};

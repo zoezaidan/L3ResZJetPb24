@@ -22,9 +22,9 @@ void histograms::initializePointers() {
   genjet_pt = nullptr; genjet_eta = nullptr; genjet_phi = nullptr;
   genjetdyn_kt = nullptr; genjetdyn_deltaR = nullptr;
   genjetdyn_z = nullptr; genjetdyn_z_cutdeltaR = nullptr;
-  genphoton_pt = nullptr; genphoton_eta = nullptr; genphoton_phi = nullptr;
+  genMuon_pt = nullptr; genMuon_eta = nullptr; genMuon_phi = nullptr;
   plane_inclusive = nullptr; jetresponse = nullptr;
-  photonresponse = nullptr; ptres = nullptr; photon_ptres = nullptr;
+  Muonresponse = nullptr; ptres = nullptr; Muon_ptres = nullptr;
   ktres = nullptr; deltaRres = nullptr; zres = nullptr;
   
   // Dijet histograms
@@ -42,27 +42,27 @@ void histograms::initializePointers() {
   dijetasymmetry3Dnarrow = nullptr; dijetasymmetry3Dabseta = nullptr;
   dijetasymmetry3Dabsetawide = nullptr; dijetasymmetry3Dabsetanarrow = nullptr;
   
-  // Photon+Jet histograms
-  photon_pt = nullptr; photon_eta = nullptr; photon_phi = nullptr;
-  photon_HoverE = nullptr; photon_sigmaIetaIeta = nullptr;
-  photon_SwissCrx = nullptr; photon_SeedTime = nullptr;
+  // Muon+Jet histograms
+  Muon_pt = nullptr; Muon_eta = nullptr; Muon_phi = nullptr;
+  Muon_HoverE = nullptr; Muon_sigmaIetaIeta = nullptr;
+  Muon_SwissCrx = nullptr; Muon_SeedTime = nullptr;
   awayside_jet_pt = nullptr; awayside_jet_eta = nullptr;
   awayside_jet_phi = nullptr; awayside_jet_uncorr_pt = nullptr;
-  photonjet_dphi = nullptr; photonjet_balance = nullptr;
-  photonjet_ptavg = nullptr; photonjet_alpha = nullptr;
-  photonjet_balance_a01 = nullptr; photonjet_balance_a02 = nullptr;
-  photonjet_balance_a03 = nullptr; photonjet_balance_a04 = nullptr;
-  photonjet_balance_a05 = nullptr; photonjet_balance_a06 = nullptr;
-  photonjet_balance2D_a01 = nullptr; photonjet_balance2D_a02 = nullptr;
-  photonjet_balance2D_a03 = nullptr; photonjet_balance2D_a04 = nullptr;
-  photonjet_balance2D_a05 = nullptr; photonjet_balance2D_a06 = nullptr;
-  photonjet_balance3D = nullptr; photonjet_balance3Dwide = nullptr;
-  photonjet_balance3Dnarrow = nullptr; photonjet_balance3Dabseta = nullptr;
-  photonjet_balance3Dabsetawide = nullptr; photonjet_balance3Dabsetanarrow = nullptr;
-  photonjet_balance3D_counts = nullptr; photonjet_balance3Dwide_counts = nullptr;
-  photonjet_balance3Dnarrow_counts = nullptr; photonjet_balance3Dabseta_counts = nullptr;
-  photonjet_balance3Dabsetawide_counts = nullptr; photonjet_balance3Dabsetanarrow_counts = nullptr;
-  HLTPhoton30 = nullptr; HLTPhoton30_ptav = nullptr;
+  Muonjet_dphi = nullptr; Muonjet_balance = nullptr;
+  Muonjet_ptavg = nullptr; Muonjet_alpha = nullptr;
+  Muonjet_balance_a01 = nullptr; Muonjet_balance_a02 = nullptr;
+  Muonjet_balance_a03 = nullptr; Muonjet_balance_a04 = nullptr;
+  Muonjet_balance_a05 = nullptr; Muonjet_balance_a06 = nullptr;
+  Muonjet_balance2D_a01 = nullptr; Muonjet_balance2D_a02 = nullptr;
+  Muonjet_balance2D_a03 = nullptr; Muonjet_balance2D_a04 = nullptr;
+  Muonjet_balance2D_a05 = nullptr; Muonjet_balance2D_a06 = nullptr;
+  Muonjet_balance3D = nullptr; Muonjet_balance3Dwide = nullptr;
+  Muonjet_balance3Dnarrow = nullptr; Muonjet_balance3Dabseta = nullptr;
+  Muonjet_balance3Dabsetawide = nullptr; Muonjet_balance3Dabsetanarrow = nullptr;
+  Muonjet_balance3D_counts = nullptr; Muonjet_balance3Dwide_counts = nullptr;
+  Muonjet_balance3Dnarrow_counts = nullptr; Muonjet_balance3Dabseta_counts = nullptr;
+  Muonjet_balance3Dabsetawide_counts = nullptr; Muonjet_balance3Dabsetanarrow_counts = nullptr;
+  HLT_PPRefL2SingleMu12 = nullptr; HLT_PPRefL2SingleMu12_ptav = nullptr;
   
   // JER histograms
   responses3D = nullptr; phiresponse = nullptr; etaresponse = nullptr;
@@ -103,7 +103,7 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
   initializePointers();
   
   bool createDijet = (type == AnalysisType::DIJET || type == AnalysisType::ALL);
-  bool createPhotonJet = (type == AnalysisType::PHOTONJET || type == AnalysisType::ALL);
+  bool createZJet = (type == AnalysisType::ZJET || type == AnalysisType::ALL);
   
   // ============================================
   // COMMON HISTOGRAMS (created for all analyses)
@@ -132,11 +132,11 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
     genjet_phi = new TH1D("gen jet phi"," gen jet #phi; gen jet #phi;", 20, -2.5, 2.5);
     jetresponse = new TProfile("response","",100,100,1000);
     ptres = new TH1D("pT res"," pT ; (pT_reco-pT_gen)/pT_gen;", 40, -2, 2);
-    genphoton_pt = new TH1D("gen photon pT", "gen photon p_{T}; gen photon p_{T};", 100, 0, 500);
-    genphoton_eta = new TH1D("gen photon eta", "gen photon #eta; gen photon #eta;", 50, -2.5, 2.5);
-    genphoton_phi = new TH1D("gen photon phi", "gen photon #phi; gen photon #phi;", nphis, phirange);
-    photonresponse = new TProfile("photon response", "", 100, 0, 500);
-    photon_ptres = new TH1D("photon pT res", "photon p_{T}; (p_{T,reco}-p_{T,gen})/p_{T,gen};", 40, -0.5, 0.5);
+    genMuon_pt = new TH1D("gen Muon pT", "gen Muon p_{T}; gen Muon p_{T};", 100, 0, 500);
+    genMuon_eta = new TH1D("gen Muon eta", "gen Muon #eta; gen Muon #eta;", 50, -2.5, 2.5);
+    genMuon_phi = new TH1D("gen Muon phi", "gen Muon #phi; gen Muon #phi;", nphis, phirange);
+    Muonresponse = new TProfile("Muon response", "", 100, 0, 500);
+    Muon_ptres = new TH1D("Muon pT res", "Muon p_{T}; (p_{T,reco}-p_{T,gen})/p_{T,gen};", 40, -0.5, 0.5);
   }
   
   // Weight histograms (common)
@@ -155,6 +155,8 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
     probe_pt = new TH1D("probe jet pT", "probe jet p_{T}; probe jet p_{T};", 100, 15, 1000);
     probe_eta = new TH1D("probe jet eta"," probe jet #eta; probe jet #eta;", 40, -5.2, 5.2);
     probe_phi = new TH1D("probe jet phi"," probe jet #phi; probe jet #phi;", 25, -3.1415926535, 3.1415926535);
+
+    alphas = new TH1D("alpha","alpha;alpha", 10, 0.0, 0.5);
 
     // Dijet triggers
     HLTZB = new TH1D("HLTZB", "leading jet p_{T}; leading jet p_{T};", 100, 0, 1000);
@@ -221,7 +223,7 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
     absasymmdist3D = new TH3D("absasymmdist3D",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
     asymmdist3D = new TH3D("asymmdist3D",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], ny, &y[0]);
 
-    // JER alpha-dependent asymmetries
+    // JER needs asymmetries as function of alpha
     asymmdist3D_a10 = new TH3D("asymmdist3D_a10",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], ny, &y[0]);
     absasymmdist3D_a10  = new TH3D("absasymmdist3D_a10",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
     asymmdist3D_a15 = new TH3D("asymmdist3D_a15",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], ny, &y[0]);
@@ -238,64 +240,97 @@ histograms::histograms(TDirectory *dir, float etamin, float etamax, float hibinm
     absasymmdist3D_a40 = new TH3D("absasymmdist3D_a40",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
     asymmdist3D_a45 = new TH3D("asymmdist3D_a45",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], ny, &y[0]);
     absasymmdist3D_a45 = new TH3D("absasymmdist3D_a45",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+
+    if (ismc) {
+      absasymmdist3D_gen_a10 = new TH3D("absasymmdist3D_gen_a10",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a15 = new TH3D("absasymmdist3D_gen_a15",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a20 = new TH3D("absasymmdist3D_gen_a20",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a25 = new TH3D("absasymmdist3D_gen_a25",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a30 = new TH3D("absasymmdist3D_gen_a30",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a35 = new TH3D("absasymmdist3D_gen_a35",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a40 = new TH3D("absasymmdist3D_gen_a40",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+      absasymmdist3D_gen_a45 = new TH3D("absasymmdist3D_gen_a45",";;", nptforjec, &ptforjec[0], njeretas, &jeretarange[0], nx, &x[0]);
+    }
   }
 
   // ============================================
-  // PHOTON+JET SPECIFIC HISTOGRAMS
+  // Z+JET SPECIFIC HISTOGRAMS
   // ============================================
-  if (createPhotonJet) {
-    photon_pt = new TH1D("photon_pt", "Photon p_{T}", 100, 0, 500);
-    photon_eta = new TH1D("photon_eta", "Photon #eta", 50, -2.5, 2.5);
-    photon_phi = new TH1D("photon_phi", "Photon #phi", nphis, phirange);
-    photon_HoverE = new TH1D("photon_HoverE", "Photon H/E", 50, 0, 0.5);
-    photon_sigmaIetaIeta = new TH1D("photon_sigmaIetaIeta", "Photon #sigma_{i#etai#eta}", 50, 0, 0.05);
-    photon_SwissCrx = new TH1D("photon_SwissCrx", "Photon Swiss Cross", 50, 0.8, 1.0);
-    photon_SeedTime = new TH1D("photon_SeedTime", "Photon Seed Time", 50, -10, 10);
-
+  if (createZJet) {
+    Muon_pt = new TH1D("Muon_pt", "Muon p_{T}", 100, 0, 500);
+    Muon_eta = new TH1D("Muon_eta", "Muon #eta", 50, -2.5, 2.5);
+    Muon_phi = new TH1D("Muon_phi", "Muon #phi", nphis, phirange);
+    Muon_HoverE = new TH1D("Muon_HoverE", "Muon H/E", 50, 0, 0.5);
+    Muon_sigmaIetaIeta = new TH1D("Muon_sigmaIetaIeta", "Muon #sigma_{i#etai#eta}", 50, 0, 0.05);
+    Muon_SwissCrx = new TH1D("Muon_SwissCrx", "Muon Swiss Cross", 50, 0.8, 1.0);
+    Muon_SeedTime = new TH1D("Muon_SeedTime", "Muon Seed Time", 50, -10, 10);
     awayside_jet_pt = new TH1D("awayside_jet_pt", "Away-side Jet p_{T}", 100, 0, 500);
     awayside_jet_eta = new TH1D("awayside_jet_eta", "Away-side Jet #eta", netas, etarange);
     awayside_jet_phi = new TH1D("awayside_jet_phi", "Away-side Jet #phi", nphis, phirange);
     awayside_jet_uncorr_pt = new TH1D("awayside_jet_uncorr_pt", "Away-side Jet p_{T} (uncorr)", 100, 0, 500);
 
-    photonjet_dphi = new TH1D("photonjet_dphi", "#Delta#phi(#gamma,jet)", 50, 0, 3.14159);
-    photonjet_balance = new TH1D("photonjet_balance", "p_{T}^{jet}/p_{T}^{#gamma}", 50, 0, 2);
-    photonjet_ptavg = new TH1D("photonjet_ptavg", "p_{T,avg}", 100, 0, 500);
-    photonjet_alpha = new TH1D("photonjet_alpha", "#alpha (3rd jet fraction)", 50, 0, 1);
+    Muonjet_dphi = new TH1D("Muonjet_dphi", "#Delta#phi(Muon,jet)", 50, 0, 3.14159);
+    Muonjet_balance = new TH1D("Muonjet_balance", "p_{T}^{jet}/p_{T}^{Muon}", 50, 0, 2);
+    Muonjet_ptavg = new TH1D("Muonjet_ptavg", "p_{T,avg}", 100, 0, 500);
+    Muonjet_alpha = new TH1D("Muonjet_alpha", "#alpha (3rd jet fraction)", 50, 0, 1);
 
     // 1D profiles
-    photonjet_balance_a01 = new TProfile("photonjet_balance_a01", "Balance (#alpha<0.1)", nptforjec, &ptforjec[0]);
-    photonjet_balance_a02 = new TProfile("photonjet_balance_a02", "Balance (#alpha<0.2)", nptforjec, &ptforjec[0]);
-    photonjet_balance_a03 = new TProfile("photonjet_balance_a03", "Balance (#alpha<0.3)", nptforjec, &ptforjec[0]);
-    photonjet_balance_a04 = new TProfile("photonjet_balance_a04", "Balance (#alpha<0.4)", nptforjec, &ptforjec[0]);
-    photonjet_balance_a05 = new TProfile("photonjet_balance_a05", "Balance (#alpha<0.5)", nptforjec, &ptforjec[0]);
-    photonjet_balance_a06 = new TProfile("photonjet_balance_a06", "Balance (#alpha<0.6)", nptforjec, &ptforjec[0]);
+    Muonjet_balance_a01 = new TProfile("Muonjet_balance_a01", "Balance (#alpha<0.1)", nptforjec, &ptforjec[0]);
+    Muonjet_balance_a02 = new TProfile("Muonjet_balance_a02", "Balance (#alpha<0.2)", nptforjec, &ptforjec[0]);
+    Muonjet_balance_a03 = new TProfile("Muonjet_balance_a03", "Balance (#alpha<0.3)", nptforjec, &ptforjec[0]);
+    Muonjet_balance_a04 = new TProfile("Muonjet_balance_a04", "Balance (#alpha<0.4)", nptforjec, &ptforjec[0]);
+    Muonjet_balance_a05 = new TProfile("Muonjet_balance_a05", "Balance (#alpha<0.5)", nptforjec, &ptforjec[0]);
+    Muonjet_balance_a06 = new TProfile("Muonjet_balance_a06", "Balance (#alpha<0.6)", nptforjec, &ptforjec[0]);
 
     // 2D profiles
-    photonjet_balance2D_a01 = new TProfile2D("photonjet_balance2D_a01", "Balance (#alpha<0.1)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
-    photonjet_balance2D_a02 = new TProfile2D("photonjet_balance2D_a02", "Balance (#alpha<0.2)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
-    photonjet_balance2D_a03 = new TProfile2D("photonjet_balance2D_a03", "Balance (#alpha<0.3)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
-    photonjet_balance2D_a04 = new TProfile2D("photonjet_balance2D_a04", "Balance (#alpha<0.4)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
-    photonjet_balance2D_a05 = new TProfile2D("photonjet_balance2D_a05", "Balance (#alpha<0.5)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
-    photonjet_balance2D_a06 = new TProfile2D("photonjet_balance2D_a06", "Balance (#alpha<0.6)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
+    Muonjet_balance2D_a01 = new TProfile2D("Muonjet_balance2D_a01", "Balance (#alpha<0.1)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
+    Muonjet_balance2D_a02 = new TProfile2D("Muonjet_balance2D_a02", "Balance (#alpha<0.2)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
+    Muonjet_balance2D_a03 = new TProfile2D("Muonjet_balance2D_a03", "Balance (#alpha<0.3)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
+    Muonjet_balance2D_a04 = new TProfile2D("Muonjet_balance2D_a04", "Balance (#alpha<0.4)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
+    Muonjet_balance2D_a05 = new TProfile2D("Muonjet_balance2D_a05", "Balance (#alpha<0.5)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
+    Muonjet_balance2D_a06 = new TProfile2D("Muonjet_balance2D_a06", "Balance (#alpha<0.6)", nptforjec, &ptforjec[0], nwetas, &wetarange[0]);
 
-    // Photon trigger
-    HLTPhoton30 = new TH1D("HLTPhoton30", "HLT Photon30 events", 2, 0, 2);
-    HLTPhoton30_ptav = new TH1D("HLTPhoton30_ptav", "p_{T,avg} (HLT Photon30)", 100, 0, 500);
+    // Z trigger
+    HLT_PPRefL2SingleMu12 = new TH1D("HLT_PPRefL2SingleMu12", "HLT PPRef L2 Single Mu12 events", 2, 0, 2);
+    HLT_PPRefL2SingleMu12_ptav = new TH1D("HLT_PPRefL2SingleMu12_ptav", "p_{T,avg} (HLT PPRef L2 Single Mu12)", 100, 0, 500);
 
     // 3D profiles (only for wide eta bin)
     if ((this->etamin - this->etamax) < -10) {
-      photonjet_balance3D = new TProfile3D("photonjet_balance3D", "Balance vs p_{T,avg}, #eta_{jet}, #alpha", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dwide = new TProfile3D("photonjet_balance3Dwide", "Balance (wide #eta bins)", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dnarrow = new TProfile3D("photonjet_balance3Dnarrow", "Balance (narrow #eta bins)", nptforjec, &ptforjec[0], netas, &etarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dabseta = new TProfile3D("photonjet_balance3Dabseta", "Balance vs p_{T,avg}, |#eta_{jet}|, #alpha", nptforjec, &ptforjec[0], nwabsetas, &wabsetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dabsetawide = new TProfile3D("photonjet_balance3Dabsetawide", "Balance (wide |#eta| bins)", nptforjec, &ptforjec[0], ndwabsetas, &dwabsetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dabsetanarrow = new TProfile3D("photonjet_balance3Dabsetanarrow", "Balance (narrow |#eta| bins)", nptforjec, &ptforjec[0], nabsetas, &absetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3D_counts = new TH3D("photonjet_balance3D_counts", "Entries vs p_{T,avg}, #eta_{jet}, #alpha", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dwide_counts = new TH3D("photonjet_balance3Dwide_counts", "Entries (wide #eta bins)", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dnarrow_counts = new TH3D("photonjet_balance3Dnarrow_counts", "Entries (narrow #eta bins)", nptforjec, &ptforjec[0], netas, &etarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dabseta_counts = new TH3D("photonjet_balance3Dabseta_counts", "Entries vs p_{T,avg}, |#eta_{jet}|, #alpha", nptforjec, &ptforjec[0], nwabsetas, &wabsetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dabsetawide_counts = new TH3D("photonjet_balance3Dabsetawide_counts", "Entries (wide |#eta| bins)", nptforjec, &ptforjec[0], ndwabsetas, &dwabsetarange[0], nalphavalues, &alphavalues[0]);
-      photonjet_balance3Dabsetanarrow_counts = new TH3D("photonjet_balance3Dabsetanarrow_counts", "Entries (narrow |#eta| bins)", nptforjec, &ptforjec[0], nabsetas, &absetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3D = new TProfile3D("Muonjet_balance3D", "Balance vs p_{T,avg}, #eta_{jet}, #alpha", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dwide = new TProfile3D("Muonjet_balance3Dwide", "Balance (wide #eta bins)", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dnarrow = new TProfile3D("Muonjet_balance3Dnarrow", "Balance (narrow #eta bins)", nptforjec, &ptforjec[0], netas, &etarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dabseta = new TProfile3D("Muonjet_balance3Dabseta", "Balance vs p_{T,avg}, |#eta_{jet}|, #alpha", nptforjec, &ptforjec[0], nwabsetas, &wabsetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dabsetawide = new TProfile3D("Muonjet_balance3Dabsetawide", "Balance (wide |#eta| bins)", nptforjec, &ptforjec[0], ndwabsetas, &dwabsetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dabsetanarrow = new TProfile3D("Muonjet_balance3Dabsetanarrow", "Balance (narrow |#eta| bins)", nptforjec, &ptforjec[0], nabsetas, &absetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3D_counts = new TH3D("Muonjet_balance3D_counts", "Entries vs p_{T,avg}, #eta_{jet}, #alpha", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dwide_counts = new TH3D("Muonjet_balance3Dwide_counts", "Entries (wide #eta bins)", nptforjec, &ptforjec[0], nwetas, &wetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dnarrow_counts = new TH3D("Muonjet_balance3Dnarrow_counts", "Entries (narrow #eta bins)", nptforjec, &ptforjec[0], netas, &etarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dabseta_counts = new TH3D("Muonjet_balance3Dabseta_counts", "Entries vs p_{T,avg}, |#eta_{jet}|, #alpha", nptforjec, &ptforjec[0], nwabsetas, &wabsetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dabsetawide_counts = new TH3D("Muonjet_balance3Dabsetawide_counts", "Entries (wide |#eta| bins)", nptforjec, &ptforjec[0], ndwabsetas, &dwabsetarange[0], nalphavalues, &alphavalues[0]);
+      Muonjet_balance3Dabsetanarrow_counts = new TH3D("Muonjet_balance3Dabsetanarrow_counts", "Entries (narrow |#eta| bins)", nptforjec, &ptforjec[0], nabsetas, &absetarange[0], nalphavalues, &alphavalues[0]);
+      
+      // Balance distribution: (photon_pT, alpha, balance_value)
+      // Match the standard binning used elsewhere (histograms.h):
+      //   X: ptforjec (variable bins)
+      //   Y: alphavalues (variable bins)
+      //   Z: balance (50 uniform bins from 0 to 2)
+      // NOTE: In this ROOT build, TH3D does not provide a constructor for
+      //       (variable x bins, variable y bins, uniform z range). We therefore
+      //       pass an explicit z-edge array with uniform spacing (0..2).
+      static double balanceEdges[51];
+      static bool balanceEdgesInit = false;
+      if (!balanceEdgesInit) {
+        for (int i = 0; i <= 50; ++i) {
+          balanceEdges[i] = 0.0 + (2.0 / 50.0) * i;
+        }
+        balanceEdgesInit = true;
+      }
+
+      Muonjet_balance_dist = new TH3D("Muonjet_balance_dist",
+                                         "Balance distribution;p_{T}^{#gamma} (GeV);#alpha;p_{T}^{jet}/p_{T}^{#gamma}",
+                                         nptforjec, &ptforjec[0],
+                                         nalphavalues, &alphavalues[0],
+                                         50, balanceEdges);
     }
   }
 }
