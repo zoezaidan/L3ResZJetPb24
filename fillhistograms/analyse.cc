@@ -1,3 +1,7 @@
+// Macro for filling histograms for dijet residual, MC JER and JER SF analysis from HiForest tuples.
+// Note: assumes uncorrected jets
+//       at the moment branches are hard coded for AK4 jets from 2023 pp reference, using either ZB or HP dataset or MC
+
 #include <iostream>
 using std::cout;
 using std::endl;
@@ -37,15 +41,14 @@ std::uint32_t _seed = 4;
 map<string, vector<histograms*> > _histos;
 
 bool debug = false;
-bool applyjetvetomap = false;
+int debugevts = 1;
+bool applyjetvetomap = true;
+bool isrun3jersf = true; // Run3 JER SF in pp is pT dependent and applied like JEC
 
+void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bool isMC = false, bool checkjetid = false, bool iszb = false, bool dol2res = false, bool dojer = false, bool fillforJER = false,float jtptlimitforalpha = 15, string inputType = "era", int maxFiles = -1, int maxEvents = -1, string outputDir = "", int batchIndex = -1, int totalBatches = 1, string jetPath = "ak4PFJetAnalyzer/t", string jesvariation = "nominal", string jersfvariation = "nominal") {
 
-//void analyse(string era = "RERECOMC", string outputfiletag = "AK4_nojetid", bool isMC = true, bool checkjetid = false, bool iszb = false, bool dol2res = false, bool dojer = false, bool fillforJER = false) {
-void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bool isMC = false, bool checkjetid = false, bool iszb = false, bool dol2res = false, bool dojer = false, bool fillforJER = false,float jtptlimitforalpha = 15, string inputType = "era", int maxFiles = -1, int maxEvents = -1, string outputDir = "", int batchIndex = -1, int totalBatches = 1, string jetPath = "ak4PFJetAnalyzer/t") {
 
   bool usecalotrig = false;
-  bool checkvalidjet = false; // this is for checking valid jet range after applying l2. now for tightly limited range. TODO: do something smarter
-
   // Build input configuration
   InputConfig config;
   config.maxFiles = maxFiles;
@@ -103,7 +106,7 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
   } else {
     outputfilename = Form("%s/%s_%s.root", config.outputDir.c_str(), inputName.c_str(), outputfiletag.c_str());
   }
-  //string outputfilename = Form("/eos/user/l/lamartik/HIJEC_rereco_results_HI2023MCTruth_chs/%s_%s.root",era.c_str(),outputfiletag.c_str());
+
   if (debug) outputfilename = "test.root";
   
   TRandom3 r;
@@ -160,7 +163,7 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
   // Triggger paths in the files
   Int_t HLT_ZB = 0, HLT_40 = 0, HLT_60 = 0, HLT_80 = 0, HLT_100 = 0, HLT_120 = 0;
  
-  //  if (isMC) triggerTree->SetBranchAddress("HLT_PPRefZeroBias_v1",&HLT_ZB);
+  if (!isMC) triggerTree->SetBranchAddress("HLT_PPRefZeroBias_v1",&HLT_ZB);
   
   if (!usecalotrig and !isMC) {
     bool hasPFTriggers =
@@ -313,15 +316,27 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
   vpar.push_back(JetCorrectorParameters(jecfile.c_str()));
   // L2 residual
   if (!isMC and dol2res) vpar.push_back(JetCorrectorParameters(l2file.c_str()));
-  if (dol2res) cout << "Applying L2 residual" << endl;
+  if (dol2res) cout << "Applying L2 residual from file " << l2file.c_str() << endl;
   corr = new FactorizedJetCorrector(vpar);
 #endif
 
-  if (dojer) {
+  JetCorrectionUncertainty *jecunc(0), *jersfunc(0);
+  if (jesvariation == "up" or jesvariation == "down") jecunc =  new JetCorrectionUncertainty(jecuncertFile);
+  if (jersfvariation == "up" or jersfvariation == "down") jersfunc =  new JetCorrectionUncertainty(jersfuncertFile);
+  
+  FactorizedJetCorrector* corrforjersf;
+  vector<JetCorrectorParameters> jersfpar;
+ 
+  if (dojer and isMC) {
     cout << "Applying JER SF" << endl;
 
     _jer = new JME::JetResolution(resolutionFile);
-    _jer_sf =  new JME::JetResolutionScaleFactor(scaleFactorFile);
+    
+    if (isrun3jersf) {
+      jersfpar.push_back(JetCorrectorParameters(scaleFactorFile.c_str()));
+      corrforjersf = new FactorizedJetCorrector(jersfpar);
+    }
+    else _jer_sf =  new JME::JetResolutionScaleFactor(scaleFactorFile);
     
   }
 
@@ -335,7 +350,7 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
    if (config.maxEvents > 0 && config.maxEvents < nentries) {
      nentries = config.maxEvents;
    }
-   if (debug && nentries > 1000) nentries = 1000;
+   if (debug && nentries > 1000) nentries = debugevts;
 
    cout << "Processing " << nentries << " events" << endl;
    for (Long64_t i = 0; i < nentries; ++i) {
@@ -356,8 +371,6 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
      if (isMC) {
        evtwt *=  weight;
      }
-
-     // cout << weight << " " << evtwt << endl;
           
      // BASIC EVENT FILTERS
      if (!isMC) {
@@ -366,11 +379,9 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
      }
      jetTree->GetEntry(i);
 
-     // Filter out events without jets with pt > 10 GeV
+     // Need dijets, hard enough leading jet
      if (nref < 2) continue;
-     if (jtpt[0] < jtptmin) {
-       continue;
-     }
+     if (jtpt[0] < jtptmin)  continue;
 
      eh->event_vz->Fill(vz, evtwt);
      if (isMC)  eh->event_pthatwsgenweight->Fill(pthat,weight);
@@ -380,22 +391,7 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
      double tagpt_gen, probept_gen, tageta_gen, probeeta_gen, pt3_gen, ptavgtp_gen, alpha_gen, asymmtp_gen;
      double djrespasymm; 
 
-     if (checkvalidjet) {   // This is based on validity of JEC. - obsolete?
-       for (int j = 0; j < nref; ++j ) {
-	 if (abs(jteta[j]) > 2.964) jtpt[j] = 0;   // Always invalid jets
-	 
-	 else if (abs(jteta[j]) > 2.5 and jtpt[j] > 120) jtpt[j] = 0;  // ?
-	 else if (abs(jteta[j]) > 1.93 and jtpt[j] > 170) jtpt[j] = 0;  // ? 
-	 
-	 if (jtpt[j] < 80) jtpt[j] = 0;
-	 // if 80-120 abseta < 2.964
-	 // 120-170 < 2.5
-	 // 170-1000 < 1.93
-       }
-     }
-
      // JET ID - this is 2023 AK4CHS jet selection 12/2024
-     // fill passjteta for all jets in the event?
      bool passjetid[nref];
      for (int j = 0; j < nref; ++j) {
        passjetid[j] = true;
@@ -423,8 +419,6 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
 	    if (jtnef[j] >= 0.4) passjetid[j] = false;
 
           }
-	   //	   if (jtpt[j] > jtptmin)	   cout << passjetid[j] << endl;
-	   //  if (passjetid[j] < 2 and nref > 2  and jtpt[j] > 70  and jtpt[1] > 40) cout << "Pass jetid: " << passjetid[j] << " pt: " << jtpt[j] << " " << jteta[j] << " " << j << " " << i <<  endl;
 	 }
        }
 
@@ -436,24 +430,62 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
 #if REDOJES == 1
 	 // cout << "Applying JES" << endl;
 	 corr->setJetPt(jtpt[j]);
-	 // corr->setJetE(jteu[jetidx]);
 	 corr->setJetEta(jteta[j]);
-	 // 	 corr->setJetPhi(jthpi[j]);
 
 	 vector<float> v = corr->getSubCorrections();
 	 float jes = v.back();
 
 	 //	 cout << "New jes correction jet pt: " << jtpt[j] << " " << jteta[j] << " "  << jes << endl;
 	 jtpt[j] *= jes;
+
+	 if (jesvariation == "up" or jesvariation == "down") { 
+	   jecunc->setJetEta(jteta[j]);
+	   jecunc->setJetPt(jtpt[j]);
+	   if (jesvariation == "up" ) jtpt[j] *= 1+jecunc->getUncertainty(true);
+	   if (jesvariation == "down" ) jtpt[j] *= 1-jecunc->getUncertainty(false); 
+	 }
+  
 #endif
 
-	 if (isMC and dojer) {
+	 if (isMC and dojer and jteta[j] <= 5.2) { // In very low pTs sometimes things go wrong 
 	   double jet_resolution = _jer->getResolution({{JME::Binning::JetPt, jtpt[j]}, {JME::Binning::JetEta, jteta[j]}, {JME::Binning::Rho, rho}});
-	   double jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::NOMINAL);
+	   double jer_sf = 1; 
 
+	   if (isrun3jersf) {
+
+	     corrforjersf->setJetPt(jtpt[j]);
+	     corrforjersf->setJetEta(jteta[j]);
+
+	     vector<float> vsf = corrforjersf->getSubCorrections();
+	     jer_sf = vsf.back();
+
+	     if (jersfvariation == "up" or jersfvariation == "down") {
+	       jersfunc->setJetEta(jteta[j]);
+	       jersfunc->setJetPt(jtpt[j]);
+
+	       float unc = 0;
+	       if (jersfvariation == "up" )  {
+		 unc = jersfunc->getUncertainty(true);
+		 jer_sf += unc*(1+jersfuncscale);
+	       }
+	       if (jersfvariation == "down" ) {
+		 unc = jersfunc->getUncertainty(false);
+		 jer_sf -= unc*(1+jersfuncscale);
+	       }
+	       
+	       if (debug) cout << "JER unc is " << unc << " and sf is " << jer_sf << endl;
+
+	     }
+
+	   }
+	   else {
+	     if (jersfvariation == "up") jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::UP);
+	     else if (jersfvariation == "down") jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::DOWN);
+	     else jer_sf = _jer_sf->getScaleFactor({{JME::Binning::JetEta, jteta[j]}, {JME::Binning::JetPt, jtpt[j]}}, Variation::NOMINAL);
+	   }
+	   
 	   float jersfcorr = 1;
-	   // TODO: not hardcoded radius
-	   // Also check resolution
+
 	   if (refdrjt[j] != -999 and refdrjt[j] < 0.2 and abs((jtpt[j]-jtpt_gen[j])) < 3*jet_resolution*jtpt[j] ) {
 	     jersfcorr += (jer_sf-1)*(jtpt[j]-jtpt_gen[j])/jtpt[j];
 	     //	     cout << "We use scaling method " <<  abs((jtpt[j]-jtpt_gen[j])) << endl;
@@ -468,15 +500,15 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
 
 	   }
 	   
-	   //	   cout << jet_resolution << " SF " << jer_sf << " eta: " << jteta[j] << " corr:  " << jersfcorr << " reco: " << jtpt[j] << " gen " << jtpt_gen[j] << " matching " << refdrjt[j] <<  endl;
+	   //  cout << "jet resolution: " << jet_resolution << " SF " << jer_sf << " eta: " << jteta[j] << " corr:  " << jersfcorr << " reco: " << jtpt[j] << " gen " << jtpt_gen[j] << " matching " << refdrjt[j] <<  endl;
 	   jtpt[j] *= jersfcorr;
 	 }
 
      }
      int ind1 = -1, ind2 = -1, ind3 = -1;
-     //     int ind[3] = {0, 1, -1};
      int ind[10] = {0, 1, -1, -1, -1, -1, -1, -1, -1, -1};
-     
+
+     // Please fix me to be smarter; looking for the indices of tje 3 hardest jets after redoing JER SF and JEC:
      if (nref > 1) {
    
        // Find highest pt
@@ -514,28 +546,24 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
 
       
        if (ind[1] == -1) continue; // Ditch events with only 1 good jet
-
-       /*       cout << "Good corr:" << jtpt[ind[0]] << " " << jtpt[ind[1]] << " " << jtpt[ind[2]] << " " << jtpt[ind[3]] << " " << jtpt[ind[4]] << " nref " << nref << endl;
-       cout << "Good corr:" << highestpt << " " << sechighestpt << " " << thirhighestpt << " nref " << nref << endl;
-       cout << "Good uncorr:" << jtpt_uncorr[ind[0]] << " " << jtpt_uncorr[ind[1]] << " " << jtpt_uncorr[ind[2]] << " " << jtpt_uncorr[ind[3]] << " " << jtpt_uncorr[ind[4]] << " nref " << nref << endl;
-       */
-
-       if (jtpt_uncorr[ind[0]] < jtptmin or jtpt_uncorr[ind[1]] < jtptmin) continue; // Didn't find dijets with good pt
+       if (jtpt[ind[2]] < jtptlimitforalpha) continue;
+       if (jtpt[ind[0]] < jtptmin or jtpt[ind[1]] < jtptmin) continue; // Didn't find dijets with good pt
 
        int probeind = 0;
        int tagind = -1;
 
        if (applyjetvetomap) {
-	//  if (vetomap->GetBinContent(vetomap->FindBin(jteta[0],jtphi[0])) > 0 or vetomap->GetBinContent(vetomap->FindBin(jteta[1],jtphi[1])) > 0) continue;
+	 if (vetomap->GetBinContent(vetomap->FindBin(jteta[0],jtphi[0])) > 0 or vetomap->GetBinContent(vetomap->FindBin(jteta[1],jtphi[1])) > 0) continue;
        }
 
        
-       if (fillforJER) {
+       if (fillforJER) { // For JER SF studies the tag and probe need to be in the same bin of eta
           const auto rand = r.Rndm();
           if (rand < 0.5) { tagind = ind[1]; probeind = ind[0]; }
           else  { tagind = ind[0];  probeind = ind[1];}
           
        }
+       // For residual JEC tag has to be in the barrel, probe can be anywhere
        else {
         if (abs(jteta[ind[0]]) > 1.3 and abs(jteta[ind[1]]) <= 1.3) { tagind = ind[1]; probeind = ind[0]; }
         else if (abs(jteta[ind[1]]) > 1.3 and abs(jteta[ind[0]]) <= 1.3)  { tagind = ind[0];  probeind = ind[1]; }
@@ -575,7 +603,8 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
        
        
        if (ind[2] != -1) alpha = jtpt[ind[2]]/ptavgtp;
-       else alpha = 0; // In case only two jets
+       else alpha = 0; // In case of only two jets
+
 
       if (ind[2] != -1 && jtpt[ind[2]] < jtptlimitforalpha) continue;
      
@@ -670,6 +699,10 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
        if (isMC && tagincorrecteta && h->absasymmdist3D_gen_a30) h->absasymmdist3D_gen_a30->Fill(ptavgtp_gen, abs(probeeta_gen), abs(asymmtp_gen/2./ptavgtp_gen), evtwt);
 
 		   h->dijetbalance_a03->Fill(asymmtp/2./ptavgtp, evtwt);
+
+		   if (ptavgtp >= 30 and ptavgtp < 40) h->dijetbalance_a03_pt30to40->Fill(abs(probeeta), asymmtp/2./ptavgtp, evtwt);
+		   if (ptavgtp >= 40 and ptavgtp < 80) h->dijetbalance_a03_pt40to80->Fill(abs(probeeta), asymmtp/2./ptavgtp, evtwt);
+		   
 		   h->dijetasymmetry2D_a03->Fill(ptavgtp, probeeta, asymmtp/2./ptavgtp, evtwt);
 		   h->dijetasymmetry_a03->Fill(ptavgtp, asymmtp/2./ptavgtp, evtwt);
 
@@ -771,7 +804,7 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
 		 if (HLT_ZB) h->HLTZB->Fill(jtpt[ind[0]],evtwt);
 
 		 if (HLT_40) h->HLT40->Fill(jtpt[ind[0]],evtwt);
-		 if (HLT_60) h->HLT60->Fill(jtpt[ind[0]],evtwt); //  if (jtpt[0] > 100.) cout << jtpt[0] << "  " << HLT_100 << endl; }
+		 if (HLT_60) h->HLT60->Fill(jtpt[ind[0]],evtwt);
 		 if (HLT_80) h->HLT80->Fill(jtpt[ind[0]],evtwt);
 		 if (HLT_100) h->HLT100->Fill(jtpt[ind[0]],evtwt);
 		 if (HLT_120) { h->HLT120->Fill(jtpt[ind[0]],evtwt);}
@@ -820,5 +853,5 @@ void analyse(string input = "RERECOHP", string outputfiletag = "AK4_nojetid", bo
   eh->Write();
  
   cout << "Wrote " << outputfilename.c_str() << endl;
-
+ 
  }

@@ -18,7 +18,7 @@ TString inFileNameDown = "../ptfits-jerdown3per/fits_pt_dep_jerdown3per.root";
 TString kfactFileDown = "../L2fits-jerdown3per/correctionfile-jersfdown3per.root";
 
 bool loglin = false; // Used log-linear parametrization for the corrections?
-string header = "{1 JetEta 1 JetPt "" Correction JECSource}";
+string header = "{1 JetEta 1 JetPt \"\" Correction JECSource}";
 
 ////
 
@@ -43,9 +43,9 @@ void L2res_all_uncertainties( ) {
    auto kfactsDown = (TH1D*)inKfactsDown->Get("ratio");
 
 
-   stat_uncertainty(kfacts, "Spring23Prompt23PbPb_stat_unc.txt");
-   symm_uncertainty(kfacts, kfactsUp, kfactsDown, inFile, inFileUp, inFileDown, false, "Spring23Prompt23PbPb_JER_unc.txt");
-   param_uncertainty(inFile, kfacts, false, "Spring23Prompt23PbPb_param_unc.txt");
+   stat_uncertainty(kfacts, "Spring23Prompt23PbPb_RelativeStat_unc.txt");
+   symm_uncertainty(kfacts, kfactsUp, kfactsDown, inFile, inFileUp, inFileDown, false, "Spring23Prompt23PbPb_RelativeJER_unc.txt");
+   param_uncertainty(inFile, kfacts, false, "Spring23Prompt23PbPb_RelativePt_unc.txt");
 }
 
 void stat_uncertainty(TH1D* kfacts, TString outFileName) {
@@ -179,8 +179,8 @@ void symm_uncertainty(TH1D* kfacts, TH1D* kfactsUp, TH1D* kfactsDown, TFile* inF
 	 float nom, up, down;
 
 	 nom = kfacts->GetBinContent(etabin)* (params_nom->Eval(pts[i]));
-	 up = kfacts->GetBinContent(etabin)* (params_up->Eval(pts[i]));
-	 down = kfacts->GetBinContent(etabin)* (params_down->Eval(pts[i]));
+	 up = kfactsUp->GetBinContent(etabin)* (params_up->Eval(pts[i]));
+	 down = kfactsDown->GetBinContent(etabin)* (params_down->Eval(pts[i]));
  
 	 float unc = 0.5*(abs(nom-up) + abs(nom-down) );
 	 //float unc = max(abs(nom-up),abs(nom-down) ); // Alternative symmetrization 
@@ -214,8 +214,8 @@ void symm_uncertainty(TH1D* kfacts, TH1D* kfactsUp, TH1D* kfactsDown, TFile* inF
 	 float nom, up, down;
 	 
 	 nom = kfacts->GetBinContent(etabin)* (params_nom->Eval(pts[i]));
-	 up = kfacts->GetBinContent(etabin)* (params_up->Eval(pts[i]));
-	 down = kfacts->GetBinContent(etabin)* (params_down->Eval(pts[i]));
+	 up = kfactsUp->GetBinContent(etabin)* (params_up->Eval(pts[i]));
+	 down = kfactsDown->GetBinContent(etabin)* (params_down->Eval(pts[i]));
 	 
 	 float unc = 0.5*(abs(nom-up) + abs(nom-down) );
 	 //float unc = max(abs(nom-up),abs(nom-down) ); // Alternative symmetrization 

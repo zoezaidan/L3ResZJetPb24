@@ -3,16 +3,24 @@
 #define REDOJES 1
 
 
-//string jecfile = "jecfiles/2023ppwithpbpb_old_MC_L2Relative_AK4PF.txt";
-string jecfile = "jecfiles/Prompt24HIpp_V1_MC_L2Relative_AK4PF.txt";
-string MCjecfile = "jecfiles/Prompt24HIpp_V1_MC_L2Relative_AK4PF.txt";
-string l2file = "jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt";
+string jecfile = "jecfiles/Stdplusgaus-weights-bigHF_L2Relative_AK4PF.txt";
+//string jecfile = "jecfiles/Spring23_HI_V1_MC_L2Relative_AK4PF.txt";
+
+//string l2file = "jecfiles/L2residual-param-loglin-oldptbins.txt";
+//string l2file = "jecfiles/L2residual-param-Run3-jersf.txt";
+string l2file = "jecfiles/L2residual-param-loglin-jersf.txt";
 //string l2file = "jecfiles/Spring23_HI_V1_DATA_L2Residual_AK4PFCHS.txt";
 
 // JER
-string resolutionFile = "jecfiles/MCjerparams-vetoall.txt";
+string resolutionFile = "jecfiles/MCjerparams-feb2026.txt";
 //string scaleFactorFile = "jecfiles/JERSF_fromRMS_chs_vetoall.txt";
 string scaleFactorFile = "jecfiles/Summer23Prompt23_RunCv4_JRV1m_MC_SF_AK4PFPuppi.txt";
+
+string jersfuncertFile = "jecfiles/Summer23Prompt23_RunCv4_JRV1m_MC_SFUncertainty_AK4PFPuppi.txt";
+float jersfuncscale = 0.03; // Scale pp uncertainty up/down in a similar manner as in 2023 JEC uncertainties
+
+string jecuncertFile = "jecfiles/";
+
 
 // Jet veto map
 TString vetomapFile = "jecfiles/";

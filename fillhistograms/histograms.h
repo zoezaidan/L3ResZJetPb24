@@ -186,6 +186,10 @@ class histograms {
   TH1D* dijetbalance_a1;
   TProfile* dijetasymmetry_a1;
 
+  // low pT quick xsec
+  TH2D* dijetbalance_a03_pt30to40;
+  TH2D* dijetbalance_a03_pt40to80;
+
 // 2D profiles for the derivation
   TProfile2D* dijetasymmetry2D_a01;
   TProfile2D* dijetasymmetry2D_a02;
@@ -272,6 +276,10 @@ class histograms {
   static constexpr unsigned int ndwabsetas = sizeof(dwabsetarange)/sizeof(dwabsetarange[0])-1;
 
 
+  static constexpr double asymrange[] = {-2, -1.9, -1.8, -1.7, -1.6, -1.5, -1.4, -1.3, -1.2, -1.1, -1, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2};
+  static constexpr unsigned int nasym = sizeof(asymrange)/sizeof(asymrange[0])-1;
+
+  
   //  static constexpr double jeretarange[] = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0};
   static constexpr double jeretarange[] = {0.0, 1.3, 2.5, 3.0};
   static constexpr unsigned int njeretas = sizeof(jeretarange)/sizeof(jeretarange[0])-1;
@@ -282,20 +290,18 @@ class histograms {
   static constexpr unsigned int nphis = sizeof(phirange)/sizeof(phirange[0])-1;
   
   // These are the bins for JEC statistics etc checks
-  static constexpr float etaforjec[] = {-5.2, -3.9, -2.6, -1.3, 0.0, 1.3, 2.6, 3.9, 5.2}; // folders created using these? 
+  static constexpr float etaforjec[] = {-5.2, -3.9, -2.6, -1.3, 0.0, 1.3, 2.6, 3.9, 5.2};
   static constexpr unsigned int netaforjec = sizeof(etaforjec)/sizeof(etaforjec[0])-1;
 
-  static constexpr float halfeta[] = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0}; // Could just create folders doing these + a wide one
+  static constexpr float halfeta[] = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0};
   static constexpr unsigned int nhalfeta = sizeof(halfeta)/sizeof(halfeta[0])-1;
 
   // 0.000, 0.087, 0.174, 0.261,0.348, 0.435, 0.522, 0.609, 0.696, 0.783, 0.870, 0.957, 1.044, 1.131, 1.218,1.305, 1.392, 1.479, 1.566, 1.653, 1.74, 1.83, 1.93, 2.043, 2.172, 2.322, 2.5,2.65, 2.853, 2.964, 3.139, 3.314, 3.489, 3.664, 3.839, 4.013, 4.191, 4.363,4.538, 4.716, 4.889, 5.191
   
-  ///  static constexpr double etaforjer[] = {0.0, 0.5, 0.8, 1.1, 1.3, 1.7, 1.9, 2.1, 2.3, 2.5, 2.8, 3.0}; // Could just create folders doing these + a wide one
   static constexpr double etaforjer[] = {0.0, 0.522, 0.783, 1.044, 1.305, 1.566, 2.043, 2.322, 2.65, 2.853, 3.139, 3.485, 5.191}; // Above is okayish, this reflects detector plus adds HF
   static constexpr unsigned int netaforjer = sizeof(etaforjer)/sizeof(etaforjer[0])-1;
 
-  // Should one try narrower bins first too?
-  //   static constexpr double ptforjec[] = {40, 60, 80, 100, 120, 140, 180, 220, 300, 500, 700, 5000};
+    //   static constexpr double ptforjec[] = {40, 60, 80, 100, 120, 140, 180, 220, 300, 500, 700, 5000};
   //  static constexpr double ptforjec[] = {40, 55, 80, 120, 170, 1000};
   //  static constexpr double ptforjec[] = {15 , 25, 55, 80, 120, 170, 1000};   // Low pT as Nick
   // static constexpr double ptforjec[] = {15, 25, 80, 120, 1000};   // Low pT as Nick   - for eta,pT binned
