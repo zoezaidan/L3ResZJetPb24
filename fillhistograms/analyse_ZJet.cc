@@ -7,7 +7,6 @@ using std::endl;
 #include "TMath.h"
 #include "TRandom.h"
 #include "TTree.h"
-#include "TLorentzVector.h"
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -33,6 +32,7 @@ float rho = 0.;
 
 std::mt19937 _mersennetwister;
 std::uint32_t _seed = 4;
+//_seed = 4;
 
 #if REDOJES == 1
 #include "CondFormats/JetMETObjects/interface/JetCorrectorParameters.h"
@@ -41,347 +41,70 @@ std::uint32_t _seed = 4;
 bool debug = false;
 bool applyjetvetomap = true;
 
-// Z candidate structure
-struct ZCandidate {
-  float pt, eta, phi, mass, rapidity;
-  int lepton1_idx, lepton2_idx;
-  float lepton1_pt, lepton1_eta, lepton1_phi;
-  float lepton2_pt, lepton2_eta, lepton2_phi;
-  bool isValid;
-
-  ZCandidate() : pt(-1), eta(0), phi(0), mass(0), rapidity(0),
-                 lepton1_idx(-1), lepton2_idx(-1),
-                 lepton1_pt(0), lepton1_eta(0), lepton1_phi(0),
-                 lepton2_pt(0), lepton2_eta(0), lepton2_phi(0),
-                 isValid(false) {}
-};
-
-// Reconstruct Z from dimuons
-ZCandidate ReconstructZFromMuons(Int_t nReco,
-                                 std::vector<float>* recoPt,
-                                 std::vector<float>* recoEta,
-                                 std::vector<float>* recoPhi,
-                                 std::vector<int>* recoCharge,
-                                 std::vector<bool>* recoIDTight,
-                                 std::vector<float>* recoPFChIso,
-                                 std::vector<float>* recoPFPhoIso,
-                                 std::vector<float>* recoPFNeuIso,
-                                 std::vector<float>* recoPFPUIso) {
-  ZCandidate z;
-  if (nReco < 2) return z;
-  float bestMassDiff = 999;
-  float targetMass = 91.1880;  // Z mass Average in GeV (PDG 2024)
-
-  // Loop over all opposite-sign muon pairs
-  for (int i = 0; i < nReco; i++) {
-    // Muon quality cuts
-    if ((*recoPt)[i] < 20.0) continue;  // pT threshold
-    if (fabs((*recoEta)[i]) > 2.4) continue;  // Acceptance
-    // Tight muon ID check
-    if (!(*recoIDTight)[i]) continue;
-    // Muon 'i' Isolation Check ---
-    float iso_i = (*recoPFChIso)[i] + std::max(0.0f, (*recoPFNeuIso)[i] + (*recoPFPhoIso)[i] - 0.5f * (*recoPFPUIso)[i]);
-    if ((iso_i / (*recoPt)[i]) > 0.15) continue;
-    for (int j = i+1; j < nReco; j++) {
-      if ((*recoPt)[j] < 20.0) continue;
-      if (fabs((*recoEta)[j]) > 2.4) continue;
-      if (!(*recoIDTight)[j]) continue;
-      // --- Muon 'j' Isolation Check ---
-      float iso_j = (*recoPFChIso)[j] + std::max(0.0f, (*recoPFNeuIso)[j] + (*recoPFPhoIso)[j] - 0.5f * (*recoPFPUIso)[j]);
-      if ((iso_j / (*recoPt)[j]) > 0.15) continue;
-      // Opposite sign requirement
-      if ((*recoCharge)[i] * (*recoCharge)[j] >= 0) continue;
-      // Reconstruct Z 4-vector
-      TLorentzVector mu1, mu2, Z;
-      const float muon_mass = 0.1056583745;  // muon mass in GeV
-      mu1.SetPtEtaPhiM((*recoPt)[i], (*recoEta)[i], (*recoPhi)[i], muon_mass);
-      mu2.SetPtEtaPhiM((*recoPt)[j], (*recoEta)[j], (*recoPhi)[j], muon_mass);
-      Z = mu1 + mu2;
-      // Mass window: 60 < M < 120 GeV (wide for inclusive Z selection)
-      if (Z.M() < 60.0 || Z.M() > 120.0) continue;
-      // Select pair closest to Z mass
-      float massDiff = fabs(Z.M() - targetMass);
-      if (massDiff < bestMassDiff) {
-        bestMassDiff = massDiff;
-        z.pt = Z.Pt();
-        z.eta = Z.Eta();
-        z.phi = Z.Phi();
-        z.mass = Z.M();
-        z.rapidity = Z.Rapidity();
-        z.lepton1_idx = i;
-        z.lepton2_idx = j;
-        z.lepton1_pt = (*recoPt)[i];
-        z.lepton1_eta = (*recoEta)[i];
-        z.lepton1_phi = (*recoPhi)[i];
-        z.lepton2_pt = (*recoPt)[j];
-        z.lepton2_eta = (*recoEta)[j];
-        z.lepton2_phi = (*recoPhi)[j];
-        z.isValid = true;
-      }
+// Helper function to load pthat weights from file
+std::map<float, double> LoadPthatWeights(const std::string& weightsFile) {
+    std::map<float, double> weights;
+    std::ifstream fin(weightsFile);
+    if (!fin) {
+        cout << "Could not open pthat weights file: " + weightsFile << endl;
+        return weights;
     }
-  }
-  return z;
+    std::string line;
+    while (std::getline(fin, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream iss(line);
+        float bin; double w;
+        if (iss >> bin >> w) {
+            weights[bin] = w;
+        }
+    }
+    return weights;
 }
 
-// Reconstruct Z from dielectrons
-ZCandidate ReconstructZFromElectrons(Int_t nEle,
-                                     std::vector<float>* elePt,
-                                     std::vector<float>* eleEta,
-                                     std::vector<float>* elePhi,
-                                     std::vector<int>* eleCharge,
-                                     std::vector<int>* eleCutIdWP80, 
-                                     std::vector<float>* elePFRelIsoWithEA) {
-  ZCandidate z;
-  if (nEle < 2) return z;
-  float bestMassDiff = 999;
-  float targetMass = 91.1880;  // Z mass in GeV
-
-  // Loop over all opposite-sign electron pairs
-  for (int i = 0; i < nEle; i++) {
-    // Electron quality cuts
-    if ((*elePt)[i] < 20.0) continue;  // pT threshold
-    if (fabs((*eleEta)[i]) > 2.5) continue;  // Acceptance (slightly wider than muons)
-
-    // Tight electron ID check (WP80 = tight)
-    //if (eleCutIdWP80 && (*eleCutIdWP80)[i] != 1) continue;
-
-    // --- Electron 'i' Isolation Check ---
-    if (elePFRelIsoWithEA && (*elePFRelIsoWithEA)[i] > 0.15) continue;
-    for (int j = i+1; j < nEle; j++) {
-      if ((*elePt)[j] < 20.0) continue;
-      if (fabs((*eleEta)[j]) > 2.5) continue;
-      //if (eleCutIdWP80 && (*eleCutIdWP80)[j] != 1) continue;
-      if (elePFRelIsoWithEA && (*elePFRelIsoWithEA)[j] > 0.15) continue;
-      // Opposite sign requirement
-      if ((*eleCharge)[i] * (*eleCharge)[j] >= 0) continue;
-      // Reconstruct Z 4-vector
-      TLorentzVector ele1, ele2, Z;
-      const float electron_mass = 0.000510998950;  // electron mass in GeV
-      ele1.SetPtEtaPhiM((*elePt)[i], (*eleEta)[i], (*elePhi)[i], electron_mass);
-      ele2.SetPtEtaPhiM((*elePt)[j], (*eleEta)[j], (*elePhi)[j], electron_mass);
-      Z = ele1 + ele2;
-      // Mass window: 60 < M < 120 GeV
-      if (Z.M() < 60.0 || Z.M() > 120.0) continue;
-      // Select pair closest to Z mass
-      float massDiff = fabs(Z.M() - targetMass);
-      if (massDiff < bestMassDiff) {
-        bestMassDiff = massDiff;
-        z.pt = Z.Pt();
-        z.eta = Z.Eta();
-        z.phi = Z.Phi();
-        z.mass = Z.M();
-        z.rapidity = Z.Rapidity();
-        z.lepton1_idx = i;
-        z.lepton2_idx = j;
-        z.lepton1_pt = (*elePt)[i];
-        z.lepton1_eta = (*eleEta)[i];
-        z.lepton1_phi = (*elePhi)[i];
-        z.lepton2_pt = (*elePt)[j];
-        z.lepton2_eta = (*eleEta)[j];
-        z.lepton2_phi = (*elePhi)[j];
-        z.isValid = true;
-      }
+// Helper function to get the pthat bin for a given value
+float GetPthatBin(float pthat, const std::vector<float>& bins) {
+    float result = bins.front();
+    for (size_t i = 0; i < bins.size(); ++i) {
+        if (pthat >= bins[i]) result = bins[i];
+        else break;
     }
-  }
-  return z;
+    return result;
 }
 
-ZCandidate ReconstructGenZFromMuons(Int_t nGen,
-                                    std::vector<int>* genPID,
-                                    std::vector<int>* genStatus,
-                                    std::vector<float>* genPt,
-                                    std::vector<float>* genEta,
-                                    std::vector<float>* genPhi,
-                                    std::vector<int>* genMotherID) {
-  ZCandidate genZ;
-  
-  // 1. First check if the pointers exist
-  if (!genPID || !genStatus || !genPt) return genZ;
-  
-  // 2. FORCE nGen to be the actual vector size, ignoring the garbage tree variable
-  int safe_nGen = genPID->size();
-  
-  // 3. Now safely check if we have enough particles
-  if (safe_nGen < 2) return genZ;
+//I will modify this code that it's originally for Photons+Jets to Muon+Jets
+// .
+// .
+// .
+// .
+// .
+// MC Matt produced:
+// /store/user/mnguyen//JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/MuonjetMadraph/260206_124018/0000/merged_HiForestMiniAOD.root
+// /store/user/mnguyen//JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/MuonjetMadraph/260206_124018/0001/merged_HiForestMiniAOD.root
+// /store/user/mnguyen//JEC/DYto2L-2Jets_MLL-50_TuneCP5_5p36TeV_amcatnloFXFX-pythia8/MuonjetMadraph/260206_124018/0002/merged_HiForestMiniAOD.root
+//and the otherones
+// /store/user/mnguyen//JEC/PPRefSingleMuon0/SingleMuon0/merged_HiForestMiniAOD.root
+// /store/user/mnguyen//JEC/PPRefSingleMuon1/SingleMuon1/merged_HiForestMiniAOD.root
+// /store/user/mnguyen//JEC/PPRefSingleMuon2/SingleMuon2/merged_HiForestMiniAOD.root
+// /store/user/mnguyen//JEC/PPRefSingleMuon3/SingleMuon3/merged_HiForestMiniAOD.root
 
-  float bestMassDiff = 999;
-  float targetMass = 91.1880;
-  const float muon_mass = 0.1056583745;
 
-  // Find two opposite-sign final-state muons
-  for (int i = 0; i < safe_nGen; i++) {
-    // Must be muon (PID = ±13)
-    if (abs((*genPID)[i]) != 13) continue;
+// Muon+Jet analysis for L3 residual corrections
+// jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t" or "ak4PFJetAnalyzerSDMuoncut1/t"
 
-    // Must be final state (status = 1)
-    if ((*genStatus)[i] != 1) continue;
 
-    // Optional: check mother is Z or intermediate muon
-    if (genMotherID && i < (int)genMotherID->size()) {
-      int momPID = abs((*genMotherID)[i]);
-      // Accept if mother is Z(23), muon(13), or initial state
-      if (momPID != 23 && momPID != 13 && momPID != 0 && momPID != 2212) continue;
-    }
-
-    if ((*genPt)[i] < 10.0) continue;  // Minimum pT
-
-    for (int j = i+1; j < nGen; j++) {
-      if (abs((*genPID)[j]) != 13) continue;
-      if ((*genStatus)[j] != 1) continue;
-      if ((*genPt)[j] < 10.0) continue;
-
-      // Opposite sign check
-      if ((*genPID)[i] * (*genPID)[j] >= 0) continue;
-
-      // Reconstruct Z
-      TLorentzVector mu1, mu2, Z;
-      mu1.SetPtEtaPhiM((*genPt)[i], (*genEta)[i], (*genPhi)[i], muon_mass);
-      mu2.SetPtEtaPhiM((*genPt)[j], (*genEta)[j], (*genPhi)[j], muon_mass);
-      Z = mu1 + mu2;
-
-      // Mass window check
-      if (Z.M() < 60.0 || Z.M() > 120.0) continue;
-
-      float massDiff = fabs(Z.M() - targetMass);
-      if (massDiff < bestMassDiff) {
-        bestMassDiff = massDiff;
-        genZ.pt = Z.Pt();
-        genZ.eta = Z.Eta();
-        genZ.phi = Z.Phi();
-        genZ.mass = Z.M();
-        genZ.rapidity = Z.Rapidity();
-        genZ.lepton1_idx = i;
-        genZ.lepton2_idx = j;
-        genZ.lepton1_pt = (*genPt)[i];
-        genZ.lepton1_eta = (*genEta)[i];
-        genZ.lepton1_phi = (*genPhi)[i];
-        genZ.lepton2_pt = (*genPt)[j];
-        genZ.lepton2_eta = (*genEta)[j];
-        genZ.lepton2_phi = (*genPhi)[j];
-        genZ.isValid = true;
-      }
-    }
-  }
-
-  return genZ;
-}
-
-// Reconstruct generator-level Z from gen-level electrons (ggHiNtuplizer tree)
-ZCandidate ReconstructGenZFromElectrons(Int_t nMC,
-                                        std::vector<int>* mcPID,
-                                        std::vector<int>* mcStatus,
-                                        std::vector<float>* mcPt,
-                                        std::vector<float>* mcEta,
-                                        std::vector<float>* mcPhi,
-                                        std::vector<int>* mcMomPID) {
-  ZCandidate genZ;
-  if (nMC < 2 || !mcPID || !mcStatus || !mcPt) return genZ;
-
-  float bestMassDiff = 999;
-  float targetMass = 91.1880;
-  
-  // Identify if we are looking for muons (13) or electrons (11)
-  // Based on the first lepton found in the event
-  int targetPID = 11; 
-  for(int k=0; k<nMC; k++) {
-      if (abs((*mcPID)[k]) == 13) { targetPID = 13; break; }
-      if (abs((*mcPID)[k]) == 11) { targetPID = 11; break; }
-  }
-
-  for (int i = 0; i < nMC; i++) {
-    if (abs((*mcPID)[i]) != targetPID) continue;
-    if ((*mcStatus)[i] != 1) continue;
-    if ((*mcPt)[i] < 10.0) continue;
-
-    for (int j = i+1; j < nMC; j++) {
-      if (abs((*mcPID)[j]) != targetPID) continue; // FIXED: used to be hardcoded 11
-      if ((*mcStatus)[j] != 1) continue;
-      if ((*mcPt)[j] < 10.0) continue;
-      if ((*mcPID)[i] * (*mcPID)[j] >= 0) continue;
-
-      TLorentzVector l1, l2, Z;
-      float m = (targetPID == 13) ? 0.105658 : 0.000511;
-      l1.SetPtEtaPhiM((*mcPt)[i], (*mcEta)[i], (*mcPhi)[i], m);
-      l2.SetPtEtaPhiM((*mcPt)[j], (*mcEta)[j], (*mcPhi)[j], m);
-      Z = l1 + l2;
-
-      if (Z.M() < 60.0 || Z.M() > 120.0) continue;
-
-      float massDiff = fabs(Z.M() - targetMass);
-      if (massDiff < bestMassDiff) {
-        bestMassDiff = massDiff;
-        genZ.pt = Z.Pt(); genZ.eta = Z.Eta(); genZ.phi = Z.Phi();
-        genZ.mass = Z.M(); genZ.rapidity = Z.Rapidity();
-        genZ.lepton1_pt = (*mcPt)[i]; genZ.lepton2_pt = (*mcPt)[j];
-        genZ.isValid = true;
-      }
-    }
-  }
-  return genZ;
-}
-
-// Helper function to extract jet radius from tree path
-// Examples: "ak4PFJetAnalyzer/t" -> 0.4, "ak2PFJetAnalyzer/t" -> 0.2
-float ExtractJetRadius(const std::string& jetPath) {
-    // Look for "ak" followed optionally by other chars, then a digit
-    // Handles: ak4, akCs4, akPu4, etc.
-    size_t pos = jetPath.find("ak");
-    if (pos == std::string::npos) {
-        cout << "WARNING: Could not extract jet radius from path: " << jetPath << endl;
-        cout << "         Using default radius = 0.4" << endl;
-        return 0.4;
-    }
-
-    // Move past "ak"
-    pos += 2;
-
-    // Skip any additional characters (like "Cs", "Pu", etc.) until we find a digit
-    while (pos < jetPath.size() && !isdigit(jetPath[pos])) {
-        pos++;
-    }
-
-    if (pos >= jetPath.size() || !isdigit(jetPath[pos])) {
-        cout << "WARNING: Invalid jet radius in path: " << jetPath << endl;
-        cout << "         Using default radius = 0.4" << endl;
-        return 0.4;
-    }
-
-    int radiusTimes10 = jetPath[pos] - '0';  // Convert char to int
-    float radius = radiusTimes10 / 10.0;
-
-    cout << "Detected jet radius: R = " << radius << " from path: " << jetPath << endl;
-    return radius;
-}
-
-// Z+Jet analysis for L3 residual corrections
-// jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t"
-// channel: "muon", "electron", or "both"
-void analyse_ZJet(string input = "ZJETHP",
-                  string outputfiletag = "AK4_zjet",
-                  bool isMC = false, bool checkjetid = false,
-                  string inputType = "era", int maxFiles = -1,
-                  int maxEvents = -1, string outputDir = "",
-                  int batchIndex = -1, int totalBatches = 1,
-                  string jetPath = "ak4PFJetAnalyzer/t",
-                  string channel = "muon") {  // "muon", "electron", or "both"
+//here I need to change a few things (ask)
+void analyse_ZJet(string input = "ZSM0",
+                       string outputfiletag = "AK4_Zjet",
+                       bool isMC = false, bool checkjetid = false,
+                       string inputType = "era", int maxFiles = -1,
+                       int maxEvents = -1, string outputDir = "",
+                       int batchIndex = -1, int totalBatches = 1,
+                       string jetPath = "ak4PFJetAnalyzer/t") {
 
   bool usecalotrig = false;
-  bool checkvalidjet = false; // this is for checking valid jet range after applying l2. now for
-                              // tightly limited range. TODO: do something smarter
-
-  // Validate channel option
-  if (channel != "muon" && channel != "electron" && channel != "both") {
-    cerr << "ERROR: Invalid channel option: " << channel << endl;
-    cerr << "Valid options: 'muon', 'electron', 'both'" << endl;
-    return;
-  }
-
-  cout << "Running Z+jet analysis with channel: " << channel << endl;
-
-  // Extract jet radius from tree path
-  float jetRadius = ExtractJetRadius(jetPath);
-  // Derived parameters based on jet radius
-  float leptonJetDeltaR = jetRadius;  // dR cleaning between jet and leptons
+  bool checkvalidjet =
+      false; // this is for checking valid jet range after applying l2. now for
+             // tightly limited range. TODO: do something smarter
 
   // Build input configuration
   InputConfig config;
@@ -394,7 +117,8 @@ void analyse_ZJet(string input = "ZJETHP",
 
   // Set default output directory
   if (outputDir.empty()) {
-    config.outputDir = "../L3Residual";
+    config.outputDir =
+        "/eos/home-z/zzaidanc/JetMinPOG/L3ResZJet/";
   } else {
     config.outputDir = outputDir;
   }
@@ -445,17 +169,14 @@ void analyse_ZJet(string input = "ZJETHP",
     }
   }
 
-  // Update output tag to include jet radius
-  string radiusTag = Form("_ak%.0f", 10*jetRadius);
-  string fullOutputTag = outputfiletag + radiusTag;  // e.g., "zjet_R0.4"
   if (batchIndex >= 0) {
-    // For batch mode, use just the outputfiletag (cleaner naming)
-    outputfilename = Form("%s/%s_batch%d_of_%d.root",
+    outputfilename = Form("%s/%s_%s_batch%d_of_%d.root",
                          config.outputDir.c_str(),
-                         fullOutputTag.c_str(), batchIndex, totalBatches);
+                         inputName.c_str(),
+                         outputfiletag.c_str(), batchIndex, totalBatches);
   } else {
     outputfilename = Form("%s/%s_%s.root", config.outputDir.c_str(),
-                         inputName.c_str(), fullOutputTag.c_str());
+                         inputName.c_str(), outputfiletag.c_str());
   }
   if (debug)
     outputfilename = "test.root";
@@ -466,80 +187,62 @@ void analyse_ZJet(string input = "ZJETHP",
   std::string evtPath = "hiEvtAnalyzer/HiTree";
   std::string triggerPath = "hltanalysis/HltTree";
   std::string skimPath = "skimanalysis/HltTree";
-  std::string electronPath = "ggHiNtuplizer/EventTree";
-  std::string muonPath = "muonAnalyzer/MuonTree";
+  std::string MuonPath = "muonAnalyzer/MuonTree";
 
   cout << "Using jet tree: " << jetPath << endl;
   cout << "Building input chains..." << endl;
-
-  // Determine which lepton trees we need based on channel
-  bool needPhotonTree = (channel == "electron" || channel == "both" || isMC);
-  bool needMuonTree = (channel == "muon" || channel == "both");
-
-  TreeChains *chains = BuildChainsFromConfig(config, jetPath, needPhotonTree, needMuonTree);
+  TreeChains *chains = BuildChainsFromConfig(config, jetPath, false, true);
   if (!chains || chains->nEntries == 0) {
     cerr << "ERROR: No entries found in input!" << endl;
     return;
   }
 
   auto evtTree = chains->evtChain;
-  auto photonTree = chains->photonChain;  // For electrons
-  auto muonTree = chains->muonChain;      // For muons
+  auto MuonTree = chains->muonChain;
   auto jetTree = chains->jetChain;
   auto triggerTree = chains->triggerChain;
   auto skimTree = chains->skimChain;
+
+  // Read-ahead cache for faster EOS/xrootd I/O
+  const int cacheSize = 50*1024*1024; // 50 MB per chain
+  evtTree->SetCacheSize(cacheSize);
+  jetTree->SetCacheSize(cacheSize);
+  triggerTree->SetCacheSize(cacheSize);
+  MuonTree->SetCacheSize(cacheSize);
 
   // Cuts and weights from event tree
   Int_t hiBin = -1;
   Float_t weight = 1, vz = 0, pthat = 0, evtwt = 1;
 
-  // Muon variables (vectors)
+  // Muon variables (from muonAnalyzer/MuonTree)
   Int_t nReco = 0;
   std::vector<float> *recoPt = 0;
   std::vector<float> *recoEta = 0;
   std::vector<float> *recoPhi = 0;
-  std::vector<int> *recoCharge = 0;
-  std::vector<bool> *recoIDTight = 0;  // Muon ID bits
-
+  std::vector<int>   *recoCharge = 0;
+  std::vector<int>   *recoIDTight = 0;
   std::vector<float> *recoPFChIso = 0;
   std::vector<float> *recoPFPhoIso = 0;
   std::vector<float> *recoPFNeuIso = 0;
   std::vector<float> *recoPFPUIso = 0;
 
-  // Electron variables (vectors)
-  Int_t nEle = 0;
-  std::vector<float> *elePt = 0;
-  std::vector<float> *eleEta = 0;
-  std::vector<float> *elePhi = 0;
-  std::vector<int> *eleCharge = 0;
-  std::vector<int> *eleCutIdWP80 = 0;  // Tight Electron ID
-  std::vector<float> *elePFRelIsoWithEA = 0;
-
-  // MC truth matching branches (only for MC)
-  // Electron gen-info (from ggHiNtuplizer/EventTree)
-  std::vector<int> *mcPID = 0;
-  std::vector<int> *mcStatus = 0;
-  std::vector<float> *mcPt = 0;
-  std::vector<float> *mcEta = 0;
-  std::vector<float> *mcPhi = 0;
-  std::vector<float> *mcMass = 0;
-  std::vector<int> *mcMomPID = 0;
-  // Muon gen-info (from muonAnalyzer/MuonTree)
-  Int_t nGen = 0;
-  std::vector<int> *genPID = 0;
-  std::vector<int> *genStatus = 0;
+  // MC gen-level muon branches (only used for MC)
+  std::vector<int>   *genPID = 0;
+  std::vector<int>   *genStatus = 0;
   std::vector<float> *genPt = 0;
   std::vector<float> *genEta = 0;
   std::vector<float> *genPhi = 0;
-  std::vector<int> *genMotherID = 0;
+  std::vector<int>   *genMotherID = 0;
 
-  // Event tree setup
+  
+
   // Now enable only the branches we need
   evtTree->SetBranchStatus("*", 0);
   evtTree->SetBranchStatus("hiBin", 1);
   evtTree->SetBranchStatus("vz", 1);
   if (isMC) {
     evtTree->SetBranchStatus("weight", 1);
+    evtTree->SetBranchStatus("pthat", 1);
   }
   // Set branch addresses BEFORE SetBranchStatus (like analyse.cc does)
   evtTree->SetBranchAddress("hiBin", &hiBin);
@@ -557,26 +260,18 @@ void analyse_ZJet(string input = "ZJETHP",
   // if (!isMC) skimTree->SetBranchAddress("pprimaryVertexFilter",
   // &pprimaryVertexFilter);
 
-  // Trigger branches
   Int_t trigger = 0;
-  Int_t HLT_SingleMu = 1;
-  Int_t HLT_SingleEle = 1;
 
-  // auto triggerTree = (TTree*)inFile->Get(triggerPath.c_str());
+  // Muon trigger
+  Int_t HLT_PPRefL2SingleMu12 = 1;
+
+  //auto triggerTree = (TTree*)inFile->Get(triggerPath.c_str());
 
   if (!isMC) {
+    cout << "Use Muon trigger: HLT_PPRefL2SingleMu12_v6" << endl;
     triggerTree->SetBranchStatus("*", 0);
-    if (channel == "muon" || channel == "both") {
-      triggerTree->SetBranchStatus("HLT_PPRefL2SingleMu7_v*", 1);
-      triggerTree->SetBranchAddress("HLT_PPRefL2SingleMu7_v*", &HLT_SingleMu);
-    }
-    if (channel == "electron" || channel == "both") {
-      // TODO: Update trigger name based on actual trigger in forest
-      cout << "WARNING: Using placeholder dielectron trigger name - UPDATE THIS!" << endl;
-      cout << "Check available triggers with: photonTree->GetListOfBranches()->Print()" << endl;
-      // triggerTree->SetBranchStatus("HLT_SingleEle*", 1);
-      // triggerTree->SetBranchAddress("HLT_SingleEle*", &HLT_SingleEle);
-    }
+    triggerTree->SetBranchStatus("HLT_PPRefL2SingleMu12_v6", 1);
+    triggerTree->SetBranchAddress("HLT_PPRefL2SingleMu12_v6", &HLT_PPRefL2SingleMu12);
   }
 
   // JETS
@@ -584,6 +279,7 @@ void analyse_ZJet(string input = "ZJETHP",
   jetTree->SetBranchStatus("*", 0);
 
   Int_t evt;
+
   // Reconstruted jet information
   Int_t nref;
   Float_t jtpt[MAXJETS];
@@ -596,21 +292,17 @@ void analyse_ZJet(string input = "ZJETHP",
   Float_t jtnef[MAXJETS];
   Float_t jtcef[MAXJETS];
   Float_t jtmuf[MAXJETS];
+
   Int_t jtchm[MAXJETS]; // charged multiplicity
 
-  Float_t jtPfNHM[MAXJETS]; // Neutral Hadron Multiplicity
-  Float_t jtPfCEM[MAXJETS]; // Charged EM Multiplicity
-  Float_t jtPfNEM[MAXJETS]; // Neutral EM Multiplicity
-  Float_t jtPfMUM[MAXJETS]; // Muon Multiplicity
-
-  //Int_t jtn[MAXJETS];
+  Int_t jtn[MAXJETS];
 
   jetTree->SetBranchAddress("evt", &evt);
   jetTree->SetBranchAddress("nref", &nref);
   jetTree->SetBranchAddress("rawpt", &jtpt); // we want uncorrected rawpt, jtpt might have some JEC already applied
   jetTree->SetBranchAddress("jteta", &jteta);
   jetTree->SetBranchAddress("jtphi", &jtphi);
-
+  
   jetTree->SetBranchStatus("evt", 1);
   jetTree->SetBranchStatus("nref", 1);
   jetTree->SetBranchStatus("rawpt", 1);
@@ -630,16 +322,6 @@ void analyse_ZJet(string input = "ZJETHP",
   jetTree->SetBranchStatus("jtPfMUF", 1);
   jetTree->SetBranchStatus("jtPfCHM", 1);
 
-  jetTree->SetBranchAddress("jtPfNHM", &jtPfNHM);
-  jetTree->SetBranchAddress("jtPfCEM", &jtPfCEM);
-  jetTree->SetBranchAddress("jtPfNEM", &jtPfNEM);
-  jetTree->SetBranchAddress("jtPfMUM", &jtPfMUM);
-  
-  jetTree->SetBranchStatus("jtPfNHM", 1);
-  jetTree->SetBranchStatus("jtPfCEM", 1);
-  jetTree->SetBranchStatus("jtPfNEM", 1);
-  jetTree->SetBranchStatus("jtPfMUM", 1);
-
   // Gen level jet information
   Float_t jtpt_gen[MAXJETS];
   Float_t jteta_gen[MAXJETS];
@@ -657,95 +339,51 @@ void analyse_ZJet(string input = "ZJETHP",
     jetTree->SetBranchStatus("refdrjt", 1);
   }
 
-  // Set muon branch addresses (from muonAnalyzer/MuonTree)
-  if (channel == "muon" || channel == "both") {
-    muonTree->SetBranchStatus("*", 0);
-    muonTree->SetBranchStatus("nReco", 1);
-    muonTree->SetBranchStatus("recoPt", 1);
-    muonTree->SetBranchStatus("recoEta", 1);
-    muonTree->SetBranchStatus("recoPhi", 1);
-    muonTree->SetBranchStatus("recoCharge", 1);
-    muonTree->SetBranchStatus("recoIDTight", 1);
-
-    muonTree->SetBranchAddress("nReco", &nReco);
-    muonTree->SetBranchAddress("recoPt", &recoPt);
-    muonTree->SetBranchAddress("recoEta", &recoEta);
-    muonTree->SetBranchAddress("recoPhi", &recoPhi);
-    muonTree->SetBranchAddress("recoCharge", &recoCharge);
-    muonTree->SetBranchAddress("recoIDTight", &recoIDTight);
-
-    muonTree->SetBranchStatus("recoPFChIso", 1);
-    muonTree->SetBranchStatus("recoPFPhoIso", 1);
-    muonTree->SetBranchStatus("recoPFNeuIso", 1);
-    muonTree->SetBranchStatus("recoPFPUIso", 1);
-
-    muonTree->SetBranchAddress("recoPFChIso", &recoPFChIso);
-    muonTree->SetBranchAddress("recoPFPhoIso", &recoPFPhoIso);
-    muonTree->SetBranchAddress("recoPFNeuIso", &recoPFNeuIso);
-    muonTree->SetBranchAddress("recoPFPUIso", &recoPFPUIso);
-    // Gen-level muon branches (MC only)
-    if (isMC) {
-      muonTree->SetBranchStatus("nGen", 1);
-      muonTree->SetBranchStatus("genPID", 1);
-      muonTree->SetBranchStatus("genStatus", 1);
-      muonTree->SetBranchStatus("genPt", 1);
-      muonTree->SetBranchStatus("genEta", 1);
-      muonTree->SetBranchStatus("genPhi", 1);
-      muonTree->SetBranchStatus("genMotherID", 1);
-
-      muonTree->SetBranchAddress("nGen", &nGen);
-      muonTree->SetBranchAddress("genPID", &genPID);
-      muonTree->SetBranchAddress("genStatus", &genStatus);
-      muonTree->SetBranchAddress("genPt", &genPt);
-      muonTree->SetBranchAddress("genEta", &genEta);
-      muonTree->SetBranchAddress("genPhi", &genPhi);
-      muonTree->SetBranchAddress("genMotherID", &genMotherID);
-    }
-  }
-
-  // Set electron branch addresses (from ggHiNtuplizer/EventTree)
-  if (channel == "electron" || channel == "both") {
-    photonTree->SetBranchStatus("*", 0);
-    photonTree->SetBranchStatus("nEle", 1);
-    photonTree->SetBranchStatus("elePt", 1);
-    photonTree->SetBranchStatus("eleEta", 1);
-    photonTree->SetBranchStatus("elePhi", 1);
-    photonTree->SetBranchStatus("eleCharge", 1);
-    photonTree->SetBranchStatus("eleCutIdWP80", 1);
-
-    photonTree->SetBranchAddress("nEle", &nEle);
-    photonTree->SetBranchAddress("elePt", &elePt);
-    photonTree->SetBranchAddress("eleEta", &eleEta);
-    photonTree->SetBranchAddress("elePhi", &elePhi);
-    photonTree->SetBranchAddress("eleCharge", &eleCharge);
-    photonTree->SetBranchAddress("eleCutIdWP80", &eleCutIdWP80);
-
-    photonTree->SetBranchStatus("elePFRelIsoWithEA", 1);
-    photonTree->SetBranchAddress("elePFRelIsoWithEA", &elePFRelIsoWithEA);
-  }
-
+  // Set Muon branch addresses (muonAnalyzer/MuonTree)
+  MuonTree->SetBranchStatus("*", 0);
+  MuonTree->SetBranchStatus("nReco", 1);
+  MuonTree->SetBranchStatus("recoPt", 1);
+  MuonTree->SetBranchStatus("recoEta", 1);
+  MuonTree->SetBranchStatus("recoPhi", 1);
+  MuonTree->SetBranchStatus("recoCharge", 1);
+  MuonTree->SetBranchStatus("recoIDTight", 1);
+  MuonTree->SetBranchStatus("recoPFChIso", 1);
+  MuonTree->SetBranchStatus("recoPFPhoIso", 1);
+  MuonTree->SetBranchStatus("recoPFNeuIso", 1);
+  MuonTree->SetBranchStatus("recoPFPUIso", 1);
   if (isMC) {
-    // MC truth is in photonTree (ggHiNtuplizer/EventTree) - for electrons
-    if (photonTree && (channel == "electron" || channel == "both" || isMC)) {
-      if (channel == "muon") { photonTree->SetBranchStatus("*", 0); }
-      photonTree->SetBranchStatus("mcPID", 1);
-      photonTree->SetBranchStatus("mcStatus", 1);
-      photonTree->SetBranchStatus("mcMomPID", 1);
-      photonTree->SetBranchStatus("mcPt", 1);
-      photonTree->SetBranchStatus("mcEta", 1);
-      photonTree->SetBranchStatus("mcPhi", 1);
-      // Note: mcMass might not exist in all forests
-      // photonTree->SetBranchStatus("mcMass", 1);
-
-      photonTree->SetBranchAddress("mcPID", &mcPID);
-      photonTree->SetBranchAddress("mcStatus", &mcStatus);
-      photonTree->SetBranchAddress("mcMomPID", &mcMomPID);
-      photonTree->SetBranchAddress("mcPt", &mcPt);
-      photonTree->SetBranchAddress("mcEta", &mcEta);
-      photonTree->SetBranchAddress("mcPhi", &mcPhi);
-      // photonTree->SetBranchAddress("mcMass", &mcMass);
-    }
+    MuonTree->SetBranchStatus("genPID", 1);
+    MuonTree->SetBranchStatus("genStatus", 1);
+    MuonTree->SetBranchStatus("genPt", 1);
+    MuonTree->SetBranchStatus("genEta", 1);
+    MuonTree->SetBranchStatus("genPhi", 1);
+    MuonTree->SetBranchStatus("genMotherID", 1);
   }
+  MuonTree->SetBranchAddress("nReco", &nReco);
+  MuonTree->SetBranchAddress("recoPt", &recoPt);
+  MuonTree->SetBranchAddress("recoEta", &recoEta);
+  MuonTree->SetBranchAddress("recoPhi", &recoPhi);
+  MuonTree->SetBranchAddress("recoCharge", &recoCharge);
+  MuonTree->SetBranchAddress("recoIDTight", &recoIDTight);
+  MuonTree->SetBranchAddress("recoPFChIso", &recoPFChIso);
+  MuonTree->SetBranchAddress("recoPFPhoIso", &recoPFPhoIso);
+  MuonTree->SetBranchAddress("recoPFNeuIso", &recoPFNeuIso);
+  MuonTree->SetBranchAddress("recoPFPUIso", &recoPFPUIso);
+  if (isMC) {
+    MuonTree->SetBranchAddress("genPID", &genPID);
+    MuonTree->SetBranchAddress("genStatus", &genStatus);
+    MuonTree->SetBranchAddress("genPt", &genPt);
+    MuonTree->SetBranchAddress("genEta", &genEta);
+    MuonTree->SetBranchAddress("genPhi", &genPhi);
+    MuonTree->SetBranchAddress("genMotherID", &genMotherID);
+  }
+
+  //TODO: Add electron veto for Zs
+
+  auto pthatWeights = LoadPthatWeights("jecfiles/2024_PP_private_test_weights.txt");
+  std::vector<float> pthatBins;
+  for (const auto& kv : pthatWeights) pthatBins.push_back(kv.first);
+  std::sort(pthatBins.begin(), pthatBins.end());
 
   TFile *outfile = new TFile(outputfilename.c_str(), "RECREATE");
 
@@ -755,6 +393,7 @@ void analyse_ZJet(string input = "ZJETHP",
   // Create folders for centrality bins. Mostly a placeholder in case PbPb
   // MC/data is checked.
   for (int j = 0; j < nhibins; ++j) {
+
     if (hibins[j] < hibins[j + 1]) {
       string name = Form("hibin_%.1f_%.1f", hibins[j], hibins[j + 1]);
       outfile->mkdir(name.c_str());
@@ -772,9 +411,9 @@ void analyse_ZJet(string input = "ZJETHP",
           assert(dir2);
           dir2->cd();
 
-          // Use PHOTONJET analysis type - will be adapted for Z+jet in histograms class
+          // Use PHOTONJET analysis type - only creates photon+jet specific histograms
           histograms *h = new histograms(dir2, etaedges[i], etaedges[i + 1],
-                                         hibins[j], hibins[j + 1], isMC, AnalysisType::PHOTONJET);
+                                         hibins[j], hibins[j + 1], isMC, AnalysisType::ZJET);
           _histos[name2.c_str()].push_back(h);
         }
       }
@@ -792,82 +431,73 @@ void analyse_ZJet(string input = "ZJETHP",
   cout << "Applying MC JEC from file " << jecfile.c_str() << endl;
   FactorizedJetCorrector *corr;
   vector<JetCorrectorParameters> vpar;
+  // This is MCTruth (L2Relative)
   vpar.push_back(JetCorrectorParameters(jecfile.c_str()));
-  if (!isMC && !l2file.empty()) {
+  // L2 residual for data only
+  if (!isMC) {
     cout << "Applying L2 Residual from file " << l2file.c_str() << endl;
     vpar.push_back(JetCorrectorParameters(l2file.c_str()));
-  } else if (!isMC) {
-    cout << "\033[1;31m[WARNING]: No L2 Residual file provided. Proceeding with MC-base JEC only.\033[0m" << endl;
   }
   corr = new FactorizedJetCorrector(vpar);
 #endif
 
-  // JER not needed for photon+jet L3 residual analysis
+  // JER not needed for Z+jet L3 residual analysis
 
   // Jet veto map
   auto mapfile = new TFile("jecfiles/Summer24Prompt24_RunBCDEFGHI.root","READ"); 
   auto vetomap = (TH2D*)mapfile->Get("jetvetomap_all");
+  
   // Null check for veto map
-
   if (applyjetvetomap && (!mapfile || mapfile->IsZombie() || !vetomap)) {
     cerr << "WARNING: Veto map unavailable, disabling veto map selection" << endl;
     applyjetvetomap = false;
   }
 
-  cout << "Number of entries: " << chains->nEntries << endl;
+  cout << "Number of entries :" << chains->nEntries << endl;
   Long64_t nentries = chains->nEntries;
   if (config.maxEvents > 0 && config.maxEvents < nentries) {
     nentries = config.maxEvents;
   }
+  if (debug && nentries > 1000)
+    nentries = 1000;
+
+  // Event-level batch splitting: split events within a single file across jobs
+  Long64_t firstEvent = 0;
+  if (batchIndex >= 0 && totalBatches > 1 && maxFiles <= 0) {
+    Long64_t eventsPerBatch = nentries / totalBatches;
+    firstEvent = batchIndex * eventsPerBatch;
+    Long64_t lastEvent = (batchIndex == totalBatches - 1) ? nentries : firstEvent + eventsPerBatch;
+    nentries = lastEvent - firstEvent;
+    cout << "Batch " << batchIndex << "/" << totalBatches
+         << ": processing events " << firstEvent << " to " << firstEvent + nentries << endl;
+  }
 
   cout << "Processing " << nentries << " events" << endl;
-
-  // Counters for monitoring
-  Long64_t nEventsWithMuonZ = 0;
-  Long64_t nEventsWithElectronZ = 0;
-  Long64_t nEventsPassedSelection = 0;
-  Long64_t nEventsWithGenZ = 0;
-  Long64_t nEventsPassedWithGenZ = 0;
-
-  Long64_t nEvents_hasJets = 0;
-  Long64_t nEvents_ZptCut = 0;
-  Long64_t nEvents_hasAwayJet = 0;
-  Long64_t nEvents_passVeto = 0;
-
-  Long64_t i_processed = 0;
-  for (Long64_t i = 0; i < nentries; ++i) {
+  for (Long64_t i = firstEvent; i < firstEvent + nentries; ++i) {
+    if ((i - firstEvent) % 1000000 == 0)
+      cout << "Event " << (i - firstEvent) << " / " << nentries << endl;
     evtTree->GetEntry(i);
     triggerTree->GetEntry(i);
-    // Get entries from appropriate lepton trees
-    // ONLY read the trees required for the active channel
-    if (muonTree && (channel == "muon" || channel == "both")) { muonTree->GetEntry(i); }
-    // We need photonTree even in muon mode for MC to get the gen info
-    if (photonTree && (channel == "electron" || channel == "both" || isMC)) { photonTree->GetEntry(i); }
-    
-    // Progress monitoring
-    if (i % 10000 == 0) {
-      cout << "Processing event " << i << " / " << nentries << endl;
-    }
-    if (i == 100000) break;
-    i_processed++;
+    MuonTree->GetEntry(i);
 
-    // Trigger logic
-    if (!isMC) {
-      if (channel == "muon") {
-        trigger = HLT_SingleMu;
-      } else if (channel == "electron") {
-        trigger = HLT_SingleEle;
-      } else if (channel == "both") {
-        trigger = (HLT_SingleMu || HLT_SingleEle);
-      }
-      if (!trigger) continue;
-    } else {
-      trigger = true;  // MC: no trigger requirement
-    }
+    // Z trigger logic
+     if (!isMC) {
+       trigger = HLT_PPRefL2SingleMu12;
+     }
+     if (isMC) trigger = true; // MC: no trigger requirement
+
+     if (!trigger) continue;
+
+    auto get_weight = [pthatWeights, pthatBins](float pthat) {
+        float bin = GetPthatBin(pthat, pthatBins);
+        auto it = pthatWeights.find(bin);
+        if (it != pthatWeights.end()) return static_cast<float>(it->second);
+        return 0.f;
+    };
 
     evtwt = 1;
     if (isMC) {
-      evtwt *= weight; // Just use generator weight, no pthat reweighting
+      evtwt *= weight*get_weight(pthat);
     }
 
     // cout << weight << " " << evtwt << endl;
@@ -879,179 +509,39 @@ void analyse_ZJet(string input = "ZJETHP",
     //  }
     jetTree->GetEntry(i);
 
-    // Reconstruct Z candidate(s)
-    ZCandidate zMuon, zElectron, selectedZ;
-    bool hasZMuon = false, hasZElectron = false;
-
-    if (channel == "muon" || channel == "both") {
-      zMuon = ReconstructZFromMuons(nReco, recoPt, recoEta, recoPhi, recoCharge, recoIDTight, 
-                              recoPFChIso, recoPFPhoIso, recoPFNeuIso, recoPFPUIso);
-      hasZMuon = zMuon.isValid;
-      if (hasZMuon) nEventsWithMuonZ++;
+    if (debug) {
+      cout << "Processing event " << i << ", evt number: " << evt << endl;
     }
 
-    if (channel == "electron" || channel == "both") {
-      zElectron = ReconstructZFromElectrons(nEle, elePt, eleEta, elePhi, eleCharge, eleCutIdWP80, elePFRelIsoWithEA);
-      hasZElectron = zElectron.isValid;
-      if (hasZElectron) nEventsWithElectronZ++;
+    // Z+jet: need at least 1 muon and 1 jet
+    if (nReco < 1)
+      continue;
+    if (nref < 1)
+      continue;
+    if (jtpt[0] < jtptmin) {
+      continue;
     }
-
-    // Select which Z to use
-    if (channel == "muon") {
-      if (!hasZMuon) continue;
-      selectedZ = zMuon;
-    } else if (channel == "electron") {
-      if (!hasZElectron) continue;
-      selectedZ = zElectron;
-    } else if (channel == "both") {
-      if (!hasZMuon && !hasZElectron) continue;
-      if (hasZMuon && !hasZElectron) selectedZ = zMuon;
-      else if (!hasZMuon && hasZElectron) selectedZ = zElectron;
-      else {
-        // Both valid - pick closest to Z mass
-        float muonDiff = fabs(zMuon.mass - 91.1880);
-        float eleDiff = fabs(zElectron.mass - 91.1880);
-        selectedZ = (muonDiff < eleDiff) ? zMuon : zElectron;
-      }
-    }
-
-    // ========================================
-    // GEN-LEVEL Z MATCHING (MC only)
-    // ========================================
-
-    bool hasGenZ = false;
-    ZCandidate genZ;
-    float deltaR_recoGen = 999;
-    float deltaPt_recoGen = 999;
-    float deltaMass_recoGen = 999;
-
-    if (isMC) {
-      // For BOTH muon and electron channels, the gen info is in the mcPID branches (ggHiNtuplizer)
-      if (photonTree) {
-        int nMC = mcPID ? mcPID->size() : 0;
-        
-        // If channel is muon, we look for PID 13 in the mc branches
-        if (channel == "muon") {
-            // Re-using the electron function logic but looking for muons (PID 13)
-            // We'll create a temp function or just modify yours:
-            genZ = ReconstructGenZFromElectrons(nMC, mcPID, mcStatus, mcPt, mcEta, mcPhi, mcMomPID);
-            
-            /* Note: If your ReconstructGenZFromElectrons function is strictly hardcoded 
-               to PID 11, you should change that function's loop to:
-               int targetPID = (channel == "muon") ? 13 : 11;
-               if (abs((*mcPID)[i]) != targetPID) continue; 
-            */
-        } else {
-            genZ = ReconstructGenZFromElectrons(nMC, mcPID, mcStatus, mcPt, mcEta, mcPhi, mcMomPID);
-        }
-      }
-
-      // Calculate matching metrics if gen Z was found
-      if (genZ.isValid) {
-        hasGenZ = true;
-
-        // Calculate ΔR between reco and gen Z
-        float dEta = selectedZ.eta - genZ.eta;
-        float dPhi = selectedZ.phi - genZ.phi;
-        if (dPhi > TMath::Pi()) dPhi -= 2 * TMath::Pi();
-        if (dPhi < -TMath::Pi()) dPhi += 2 * TMath::Pi();
-        deltaR_recoGen = sqrt(dEta * dEta + dPhi * dPhi);
-
-        deltaPt_recoGen = selectedZ.pt - genZ.pt;
-        deltaMass_recoGen = selectedZ.mass - genZ.mass;
-
-        // Count gen-matched events
-        nEventsWithGenZ++;
-      }
-    }
-
-    // Optional: Apply gen-matching requirement for MC validation
-    // Uncomment these lines if you want to require gen-matching:
-    if (isMC && !hasGenZ) continue;
-    if (isMC && deltaR_recoGen > 0.3) continue;  // Require dR < 0.3
-
-    // Debug output for first few events
-    if (debug && isMC && i < 5) {  // Print first 5 MC events
-      cout << "\n=== Event " << i << " Gen-Matching Debug ===" << endl;
-      cout << "Channel: " << channel << endl;
-      cout << "Reco Z: pT=" << selectedZ.pt << " GeV, eta=" << selectedZ.eta 
-           << ", phi=" << selectedZ.phi << ", mass=" << selectedZ.mass << " GeV" << endl;
-
-      if (hasGenZ) {
-        cout << "Gen Z:  pT=" << genZ.pt << " GeV, eta=" << genZ.eta 
-             << ", phi=" << genZ.phi << ", mass=" << genZ.mass << " GeV" << endl;
-        cout << "Matching: ΔR=" << deltaR_recoGen << ", ΔpT=" << deltaPt_recoGen 
-             << " GeV, ΔM=" << deltaMass_recoGen << " GeV" << endl;
-      } else {
-        cout << "Gen Z: NOT FOUND" << endl;
-
-        // Debug: show what gen leptons are available
-        if (channel == "muon" && nGen > 0) {
-          cout << "Gen-level particles in muonTree (nGen=" << nGen << "):" << endl;
-          for (int ig = 0; ig < nGen && ig < (int)genPID->size(); ig++) {
-            cout << "  [" << ig << "] PID=" << (*genPID)[ig] 
-                 << " status=" << (*genStatus)[ig]
-                 << " pT=" << (*genPt)[ig] << " GeV";
-            if (genMotherID && ig < (int)genMotherID->size()) {
-              cout << " momPID=" << (*genMotherID)[ig];
-            }
-            cout << endl;
-          }
-        } else if (channel == "electron" && mcPID && mcPID->size() > 0) {
-          cout << "Gen-level particles in ggHiNtuplizer (nMC=" << mcPID->size() << "):" << endl;
-          for (size_t ig = 0; ig < mcPID->size() && ig < 10; ig++) {
-            cout << "  [" << ig << "] PID=" << (*mcPID)[ig]
-                 << " status=" << (*mcStatus)[ig]
-                 << " pT=" << (*mcPt)[ig] << " GeV";
-            if (mcMomPID && ig < mcMomPID->size()) {
-              cout << " momPID=" << (*mcMomPID)[ig];
-            }
-            cout << endl;
-          }
-        }
-      }
-    }
-
-
-    // Require at least 1 jet
-    if (nref < 1) continue;
-    if (jtpt[0] < jtptmin) continue;
-
-    nEvents_hasJets++;
 
     eh->event_vz->Fill(vz, evtwt);
     if (isMC)
       eh->event_pthatwsgenweight->Fill(pthat, weight);
 
-    // Z+jet variables
-    double Z_pt = selectedZ.pt;
-    double Z_eta = selectedZ.eta;
-    double Z_phi = selectedZ.phi;
-    double Z_mass = selectedZ.mass;
-    double Z_rapidity = selectedZ.rapidity;
-    double jet_pt, jet_eta, jet_phi, ptavgtp, alpha, balance;
+    // This is Z+jet analysis
+    double Muon_pt, Muon_eta, Muon_phi, jet_pt, jet_eta, jet_phi, ptavgtp,
+        alpha, balance;
     double asymmtp;
-    //double djrespasymm;
-
-    // Z pt selection
-    if (Z_pt < 60) continue;
-
-    nEvents_ZptCut++;
-
-    if (debug && nEvents_ZptCut <= 5) {
-      cout << "\n=== Z+Jet Event " << nEvents_ZptCut << " (event index " << i << ") ===" << endl;
-      cout << "Z: pT=" << Z_pt << " GeV, eta=" << Z_eta << ", phi=" << Z_phi << ", mass=" << Z_mass << " GeV" << endl;
-      cout << "nref=" << nref << " jets (before selection)" << endl;
-    }
+    double djrespasymm;
 
     if (checkvalidjet) { // This is based on validity of JEC. - obsolete?
       for (int j = 0; j < nref; ++j) {
         if (abs(jteta[j]) > 2.964)
           jtpt[j] = 0; // Always invalid jets
-        else if (abs(jteta[j]) > 2.5 && jtpt[j] > 120)
+
+        else if (abs(jteta[j]) > 2.5 and jtpt[j] > 120)
           jtpt[j] = 0; // ?
-        else if (abs(jteta[j]) > 1.93 && jtpt[j] > 170)
+        else if (abs(jteta[j]) > 1.93 and jtpt[j] > 170)
           jtpt[j] = 0; // ?
+
         if (jtpt[j] < 80)
           jtpt[j] = 0;
         // if 80-120 abseta < 2.964
@@ -1064,44 +554,40 @@ void analyse_ZJet(string input = "ZJETHP",
     // fill passjteta for all jets in the event?
     bool passjetid[nref];
     for (int j = 0; j < nref; ++j) {
-      passjetid[j] = false; // Default to fail
-      
+      passjetid[j] = true;
       if (checkjetid) {
-        float eta = fabs(jteta[j]);
-        
-        // 1. Calculate Multiplicities
-        // Total Multiplicity
-        int m = jtchm[j] + jtPfNHM[j] + jtPfCEM[j] + jtPfNEM[j] + jtPfMUM[j];
-        // Charged Multiplicity
-        int cm = jtchm[j] + jtPfCEM[j] + jtPfMUM[j];
-        // Neutral Multiplicity
-        int nm = jtPfNHM[j] + jtPfNEM[j];
+        if (abs(jteta[j]) <= 2.6) {
+          if (jtnhf[j] >= 0.99)
+            passjetid[j] = false;
+          if (jtnef[j] >= 0.9)
+            passjetid[j] = false;
+          if (jtchf[j] <= 0.01)
+            passjetid[j] = false;
+          if (jtcef[j] >= 0.8)
+            passjetid[j] = false;
+          if (jtmuf[j] >= 0.8)
+            passjetid[j] = false;
+          if (jtchm[j] <= 0)
+            passjetid[j] = false;
+        } else if (abs(jteta[j]) <= 2.7) {
+          if (jtnhf[j] >= 0.9)
+            passjetid[j] = false;
+          if (jtnef[j] >= 0.99)
+            passjetid[j] = false;
+          if (jtmuf[j] >= 0.8)
+            passjetid[j] = false;
+          if (jtcef[j] >= 0.8)
+            passjetid[j] = false;
 
-        // 2. Apply pp-specific ID cuts based on eta range
-        if (eta <= 2.6) {
-          if ((jtnhf[j] < 0.9) && (jtnef[j] < 0.9) && (m > 1) && (jtmuf[j] < 0.8) && 
-              (jtchf[j] > 0.01) && (cm > 0) && (jtcef[j] < 0.8)) {
-            passjetid[j] = true;
-          }
-        } 
-        else if (eta > 2.6 && eta <= 2.7) {
-          if ((jtnhf[j] < 0.9) && (jtnef[j] < 0.99) && (jtmuf[j] < 0.8) && 
-              (cm > 0) && (jtcef[j] < 0.8)) {
-            passjetid[j] = true;
-          }
-        } 
-        else if (eta > 2.7 && eta <= 3.0) {
-          if ((jtnef[j] < 0.99) && (nm > 1)) {
-            passjetid[j] = true;
-          }
-        } 
-        else if (eta > 3.0 && eta <= 5.0) {
-          if ((jtnhf[j] > 0.2) && (jtnef[j] < 0.9) && (nm > 10)) {
-            passjetid[j] = true;
-          }
+        } else if (abs(jteta[j]) <= 3.0) {
+          if (jtnhf[j] >= 0.99)
+            passjetid[j] = false;
+          if (jtnef[j] >= 0.99)
+            passjetid[j] = false;
+        } else if (abs(jteta[j]) <= 5.0) {
+          if (jtnef[j] >= 0.4)
+            passjetid[j] = false;
         }
-      } else {
-        passjetid[j] = true; // If checkjetid is false, everyone passes
         //	   if (jtpt[j] > jtptmin)	   cout << passjetid[j] << endl;
         //  if (passjetid[j] < 2 and nref > 2  and jtpt[j] > 70  and jtpt[1] >
         //  40) cout << "Pass jetid: " << passjetid[j] << " pt: " << jtpt[j] <<
@@ -1119,82 +605,125 @@ void analyse_ZJet(string input = "ZJETHP",
       // corr->setJetE(jteu[jetidx]);
       corr->setJetEta(jteta[j]);
       // 	 corr->setJetPhi(jthpi[j]);
+
       vector<float> v = corr->getSubCorrections();
       float jes = v.back();
+
       //	 cout << "New jes correction jet pt: " << jtpt[j] << " " <<
       //jteta[j] << " "  << jes << endl;
       jtpt[j] *= jes;
 #endif
+
       // JER not applied for photon+jet L3 residual analysis
     }
 
     // ========================================
-    // Z+JET SELECTION
+    // PHOTON+JET SELECTION
     // ========================================
 
-    // Find leading and subleading away-side jets
-    // identify all jets back-to-back with Z boson (dphi > 2.7)// No just apply a small dR requirement
+    // 1. Find leading photon passing selection
+    int leadMuonIdx = -1;
+    float leadMuonPt = 0;
+    int leadMuonGenIdx = -1;
+
+    for (int iMuon = 0; iMuon < nReco; iMuon++) {
+      int currentGenIdx = -1;
+      // Kinematic cuts
+      if ((*recoPt)[iMuon] < 20.0)
+        continue; // Minimum muon pT
+      if (fabs((*recoEta)[iMuon]) > 2.4)
+        continue; // Muon acceptance
+
+      // Muon ID and isolation
+      if (!(*recoIDTight)[iMuon])
+        continue;
+      float iso = (*recoPFChIso)[iMuon] +
+                  std::max(0.f, (*recoPFNeuIso)[iMuon] + (*recoPFPhoIso)[iMuon]
+                                - 0.5f * (*recoPFPUIso)[iMuon]);
+      if (iso / (*recoPt)[iMuon] > 0.15)
+        continue;
+
+      // MC gen-matching: find closest gen muon (PID=13) within dR < 0.3
+      if (isMC) {
+        if (!genPt) continue;
+        float minDR = 0.3;
+        for (int ig = 0; ig < (int)genPt->size(); ig++) {
+          if (!genPID || !genStatus) continue;
+          if (abs((*genPID)[ig]) != 13) continue;
+          if ((*genStatus)[ig] != 1) continue;
+          if ((*genPt)[ig] < 10.0) continue;
+          float deta_gm = (*recoEta)[iMuon] - (*genEta)[ig];
+          float dphi_gm = (*recoPhi)[iMuon] - (*genPhi)[ig];
+          if (dphi_gm > TMath::Pi()) dphi_gm -= 2 * TMath::Pi();
+          if (dphi_gm < -TMath::Pi()) dphi_gm += 2 * TMath::Pi();
+          float dR_gm = sqrt(deta_gm * deta_gm + dphi_gm * dphi_gm);
+          if (dR_gm < minDR) {
+            minDR = dR_gm;
+            currentGenIdx = ig;
+          }
+        }
+        if (currentGenIdx < 0) continue;
+      }
+
+      // Find highest pT muon
+      if ((*recoPt)[iMuon] > leadMuonPt) {
+        leadMuonPt = (*recoPt)[iMuon];
+        leadMuonIdx = iMuon;
+        if (isMC) leadMuonGenIdx = currentGenIdx;
+      }
+    }
+
+    // Stop early if no Z passes the kinematic preselection
+    if (leadMuonIdx < 0)
+      continue;
+
+    // Muon ID and isolation already applied in selection loop above
+
+    // 2. Find leading and subleading away-side jets
+    // First: identify all jets back-to-back with photon (dphi > 2.7)// No just apply a small dR requirement
     int awayJetIndices[MAXJETS];
     int nAwayJets = 0;
 
     for (int j = 0; j < nref; j++) {
-      if (checkjetid && passjetid[j] == 0) continue; // Apply jet ID
-      if (jtpt[j] < 40.0) continue; // Jet kinematic cuts, Minimum pT
+      // Apply jet ID
+      if (checkjetid && passjetid[j] == 0)
+        continue;
 
-      // Calculate delta-phi with Z
-      float dphi = abs(jtphi[j] - Z_phi);
+      // Jet kinematic cuts
+      if (jtpt[j] < 20.0)
+        continue; // Minimum jet pT
+
+      // Calculate delta-phi with Muon
+      float dphi = abs(jtphi[j] - (*recoPhi)[leadMuonIdx]);
       if (dphi > TMath::Pi())
         dphi = 2 * TMath::Pi() - dphi;
 
       // Back-to-back requirement
-      if (dphi < 7*TMath::Pi()/8) continue;
+      if (dphi < 2.7488935)
+        continue; // 2*pi/3 = 2.0943951
 
-      // Check overlap with BOTH Z decay leptons
-      float deta1 = jteta[j] - selectedZ.lepton1_eta;
-      float dphi1 = abs(jtphi[j] - selectedZ.lepton1_phi);
-      if (dphi1 > TMath::Pi()) dphi1 = 2 * TMath::Pi() - dphi1;
-      float dR1 = sqrt(deta1 * deta1 + dphi1 * dphi1);
-
-      float deta2 = jteta[j] - selectedZ.lepton2_eta;
-      float dphi2 = abs(jtphi[j] - selectedZ.lepton2_phi);
-      if (dphi2 > TMath::Pi()) dphi2 = 2 * TMath::Pi() - dphi2;
-      float dR2 = sqrt(deta2 * deta2 + dphi2 * dphi2);
-
-      if (dR1 < leptonJetDeltaR || dR2 < leptonJetDeltaR) continue;  // Reject if overlaps with either lepton
+      // Calculate delta-R (reject jets close to Muon)
+      float deta = jteta[j] - (*recoEta)[leadMuonIdx];
+      float deltaR = sqrt(deta * deta + dphi * dphi);
+      if (deltaR < 0.4)
+        continue; // Isolation cone
 
       // This jet is away-side
       awayJetIndices[nAwayJets] = j;
       nAwayJets++;
     }
 
-    if (nAwayJets < 1) continue; // Need at least one away-side jet
-
-    nEvents_hasAwayJet++;
-
-    // Debug: Print jet selection details
-    if (debug && nEvents_hasAwayJet <= 5) {
-      cout << "  Found " << nAwayJets << " away-side jets" << endl;
-      for (int ii = 0; ii < nAwayJets && ii < 3; ii++) {
-        int jidx = awayJetIndices[ii];
-        cout << "    Jet " << ii << ": pT=" << jtpt[jidx] << " GeV, eta=" << jteta[jidx] 
-             << ", phi=" << jtphi[jidx];
-
-        float dphi_debug = abs(jtphi[jidx] - Z_phi);
-        if (dphi_debug > TMath::Pi()) dphi_debug = 2 * TMath::Pi() - dphi_debug;
-        cout << ", Δφ(Z,jet)=" << dphi_debug << endl;
-      }
-      cout << "  Leading jet: pT=" << jtpt[awayJetIndices[0]] << " GeV" << endl;
-      cout << "  Alpha=" << alpha << ", Balance=" << balance << endl;
-    }
-
+    // Need at least one away-side jet
+    if (nAwayJets < 1)
+      continue;
 
     // Sort away-side jets by pT (descending)
-    for (int ii = 0; ii < nAwayJets - 1; ii++) {
-      for (int jj = ii + 1; jj < nAwayJets; jj++) {
-        if (jtpt[awayJetIndices[jj]] > jtpt[awayJetIndices[ii]]) {
-          int temp = awayJetIndices[ii];
-          awayJetIndices[ii] = awayJetIndices[jj];
-          awayJetIndices[jj] = temp;
+    for (int i = 0; i < nAwayJets - 1; i++) {
+      for (int j = i + 1; j < nAwayJets; j++) {
+        if (jtpt[awayJetIndices[j]] > jtpt[awayJetIndices[i]]) {
+          int temp = awayJetIndices[i];
+          awayJetIndices[i] = awayJetIndices[j];
+          awayJetIndices[j] = temp;
         }
       }
     }
@@ -1202,56 +731,73 @@ void analyse_ZJet(string input = "ZJETHP",
     // Leading away-side jet (probe jet)
     int awayJetIdx = awayJetIndices[0];
 
-    // Calculate alpha (using 2nd away-side jet if available)
+    // 3. Calculate alpha (using 2nd away-side jet if available)
     alpha = 0;
     if (nAwayJets >= 2) {
       int secondAwayJetIdx = awayJetIndices[1];
-      float ptavg_temp = Z_pt;
+      float ptavg_temp = (*recoPt)[leadMuonIdx];
       alpha = jtpt[secondAwayJetIdx] / ptavg_temp;
     } else {
       alpha = 0; // Only one away-side jet
     }
 
-    // Calculate Z+jet variables
+    // 4. Calculate Muon+jet variables
+    Muon_pt = (*recoPt)[leadMuonIdx];
+    Muon_eta = (*recoEta)[leadMuonIdx];
+    Muon_phi = (*recoPhi)[leadMuonIdx];
+
+    float genMuonPt = -1;
+    float genMuonEta = 0;
+    float genMuonPhi = 0;
+    bool hasGenMuon = false;
+    if (isMC && leadMuonGenIdx >= 0 && genPt && genEta && genPhi) {
+      if (leadMuonGenIdx < (int)genPt->size()) {
+        genMuonPt = (*genPt)[leadMuonGenIdx];
+        genMuonEta = (*genEta)[leadMuonGenIdx];
+        genMuonPhi = (*genPhi)[leadMuonGenIdx];
+        hasGenMuon = true;
+      }
+    }
+
     jet_pt = jtpt[awayJetIdx];
     jet_eta = jteta[awayJetIdx];
     jet_phi = jtphi[awayJetIdx];
 
-    float dphi_zjet = abs(jet_phi - Z_phi);
-    if (dphi_zjet > TMath::Pi())
-      dphi_zjet = 2 * TMath::Pi() - dphi_zjet;
+    float dphi_Muonjet = abs(jet_phi - Muon_phi);
+    if (dphi_Muonjet > TMath::Pi())
+      dphi_Muonjet = 2 * TMath::Pi() - dphi_Muonjet;
 
-    ptavgtp = Z_pt;
-    balance = jet_pt / Z_pt;  // Response
+    ptavgtp = Muon_pt;
+    balance = jet_pt / Muon_pt; // Response
     asymmtp = balance;            // For compatibility with histogram filling
 
-    // Apply jet veto map to Z and leading/subleading away-side jets
+    // Apply jet veto map to photon and leading/subleading away-side jets
     if (applyjetvetomap && vetomap) {
       bool passVetoMap = true;
-
-      // Check leading away-side jet
-      int jet_bin = vetomap->FindBin(jet_eta, jet_phi);
-      if (vetomap->GetBinContent(jet_bin) > 0) passVetoMap = false;
-
+      
+      // Check Muon position - Not required for Muon since the vetomap is mostly due to pixel failures
+      // int Muon_bin = vetomap->FindBin(Muon_eta, Muon_phi);
+      // if (vetomap->GetBinContent(Muon_bin) > 0) passVetoMap = false;
+      
+      // Check leading away-side jet (probe)
+      if (passVetoMap) {
+        int jet_bin = vetomap->FindBin(jet_eta, jet_phi);
+        if (vetomap->GetBinContent(jet_bin) > 0) passVetoMap = false;
+      }
+      
       // Check subleading away-side jet if available
       if (passVetoMap && nAwayJets >= 2) {
         int secondAwayJetIdx = awayJetIndices[1];
         int subjet_bin = vetomap->FindBin(jteta[secondAwayJetIdx], jtphi[secondAwayJetIdx]);
         if (vetomap->GetBinContent(subjet_bin) > 0) passVetoMap = false;
       }
-
+      
       if (!passVetoMap) continue;
     }
 
-    nEvents_passVeto++;
-
-    nEventsPassedSelection++;
-    if (isMC && hasGenZ) {
-      nEventsPassedWithGenZ++;
-    }
     // cout << "TP:" << tagpt << " " << probept << " " << alpha << endl;
     // ========================================
-    // FILL Z+JET HISTOGRAMS
+    // FILL PHOTON+JET HISTOGRAMS
     // ========================================
 
     for (auto &histrange : _histos) {
@@ -1261,31 +807,24 @@ void analyse_ZJet(string input = "ZJETHP",
         if (jet_eta >= h->etamin && jet_eta < h->etamax &&
             hiBin >= h->hibinmin && hiBin < h->hibinmax) {
 
-          // Z properties (reuse photon histograms for now - TODO: rename in histograms class)
-          h->photon_pt->Fill(Z_pt, evtwt);
-          h->photon_eta->Fill(Z_eta, evtwt);
-          h->photon_phi->Fill(Z_phi, evtwt);
-          // Use HoverE histogram for Z mass
-          h->photon_HoverE->Fill(Z_mass, evtwt);
-          // Use sigmaIetaIeta for Z rapidity
-          h->photon_sigmaIetaIeta->Fill(Z_rapidity, evtwt);
+          // Muon properties
+          h->Muon_pt->Fill(Muon_pt, evtwt);
+          h->Muon_eta->Fill(Muon_eta, evtwt);
+          h->Muon_phi->Fill(Muon_phi, evtwt);
+          float leadRelIso = ((*recoPFChIso)[leadMuonIdx] +
+                              std::max(0.f, (*recoPFNeuIso)[leadMuonIdx] +
+                                           (*recoPFPhoIso)[leadMuonIdx] -
+                                           0.5f * (*recoPFPUIso)[leadMuonIdx])) /
+                             (*recoPt)[leadMuonIdx];
+          h->Muon_HoverE->Fill(leadRelIso, evtwt);         // reused for rel. isolation
+          h->Muon_sigmaIetaIeta->Fill(leadRelIso, evtwt);  // reused for rel. isolation
 
-          // Gen-level Z histograms (MC only)
-          if (isMC && hasGenZ) {
-            // Reuse photon gen-histograms for gen-level Z
-            if (h->genphoton_pt) h->genphoton_pt->Fill(genZ.pt, evtwt);
-            if (h->genphoton_eta) h->genphoton_eta->Fill(genZ.eta, evtwt);
-            if (h->genphoton_phi) h->genphoton_phi->Fill(genZ.phi, evtwt);
-
-            // Z response: reco_pT / gen_pT
-            if (h->photonresponse && genZ.pt > 0) {
-              h->photonresponse->Fill(genZ.pt, Z_pt / genZ.pt, evtwt);
-            }
-
-            // Z pT resolution: (reco - gen) / gen
-            if (h->photon_ptres && genZ.pt > 0) {
-              h->photon_ptres->Fill((Z_pt - genZ.pt) / genZ.pt, evtwt);
-            }
+          if (isMC && hasGenMuon) {
+            if (h->genMuon_pt) h->genMuon_pt->Fill(genMuonPt, evtwt);
+            if (h->genMuon_eta) h->genMuon_eta->Fill(genMuonEta, evtwt);
+            if (h->genMuon_phi) h->genMuon_phi->Fill(genMuonPhi, evtwt);
+            if (h->Muonresponse && genMuonPt > 0) h->Muonresponse->Fill(genMuonPt, Muon_pt / genMuonPt, evtwt);
+            if (h->Muon_ptres && genMuonPt > 0) h->Muon_ptres->Fill((Muon_pt - genMuonPt) / genMuonPt, evtwt);
           }
 
           // Away-side jet properties
@@ -1294,31 +833,30 @@ void analyse_ZJet(string input = "ZJETHP",
           h->awayside_jet_phi->Fill(jet_phi, evtwt);
           h->awayside_jet_uncorr_pt->Fill(jtpt_uncorr[awayJetIdx], evtwt);
 
-          // Z+Jet system
-          h->photonjet_dphi->Fill(dphi_zjet, evtwt);
-          h->photonjet_balance->Fill(balance, evtwt);
-          h->photonjet_ptavg->Fill(ptavgtp, evtwt);
-          h->photonjet_alpha->Fill(alpha, evtwt);
+          // Muon+Jet system
+          h->Muonjet_dphi->Fill(dphi_Muonjet, evtwt);
+          h->Muonjet_balance->Fill(balance, evtwt);
+          h->Muonjet_ptavg->Fill(ptavgtp, evtwt);
+          h->Muonjet_alpha->Fill(alpha, evtwt);
 
-          // Trigger histograms (reuse photon trigger for Z trigger)
-          if (trigger) {
-            h->HLTPhoton30->Fill(1, evtwt);
-            h->HLTPhoton30_ptav->Fill(ptavgtp, evtwt);
+          // Trigger histograms
+          if (HLT_PPRefL2SingleMu12) {
+            h->HLT_PPRefL2SingleMu12->Fill(1, evtwt);
+            h->HLT_PPRefL2SingleMu12_ptav->Fill(ptavgtp, evtwt);
           }
 
-          // Alpha-dependent balance profiles  (analogous to dijet asymmetry)
+          // Alpha-dependent balance profiles (analogous to dijet asymmetry)
           if (alpha < 0.1) {
-            h->photonjet_balance_a01->Fill(ptavgtp, balance, evtwt);
-            h->photonjet_balance2D_a01->Fill(ptavgtp, jet_eta, balance, evtwt);
+            h->Muonjet_balance_a01->Fill(ptavgtp, balance, evtwt);
+            h->Muonjet_balance2D_a01->Fill(ptavgtp, jet_eta, balance, evtwt);
           }
           if (alpha < 0.2) {
-            h->photonjet_balance_a02->Fill(ptavgtp, balance, evtwt);
-            h->photonjet_balance2D_a02->Fill(ptavgtp, jet_eta, balance, evtwt);
+            h->Muonjet_balance_a02->Fill(ptavgtp, balance, evtwt);
+            h->Muonjet_balance2D_a02->Fill(ptavgtp, jet_eta, balance, evtwt);
           }
           if (alpha < 0.3) {
-            h->photonjet_balance_a03->Fill(ptavgtp, balance, evtwt);
-            h->photonjet_balance2D_a03->Fill(ptavgtp, jet_eta, balance, evtwt);
-
+            h->Muonjet_balance_a03->Fill(ptavgtp, balance, evtwt);
+            h->Muonjet_balance2D_a03->Fill(ptavgtp, jet_eta, balance, evtwt);
             // Jet composition for alpha < 0.3 (like dijets)
             h->jet_nef->Fill(jet_pt, jtnef[awayJetIdx], evtwt);
             h->jet_cef->Fill(jet_pt, jtcef[awayJetIdx], evtwt);
@@ -1327,19 +865,19 @@ void analyse_ZJet(string input = "ZJETHP",
             h->jet_muf->Fill(jet_pt, jtmuf[awayJetIdx], evtwt);
           }
           if (alpha < 0.4) {
-            h->photonjet_balance_a04->Fill(ptavgtp, balance, evtwt);
-            h->photonjet_balance2D_a04->Fill(ptavgtp, jet_eta, balance, evtwt);
+            h->Muonjet_balance_a04->Fill(ptavgtp, balance, evtwt);
+            h->Muonjet_balance2D_a04->Fill(ptavgtp, jet_eta, balance, evtwt);
           }
           if (alpha < 0.5) {
-            h->photonjet_balance_a05->Fill(ptavgtp, balance, evtwt);
-            h->photonjet_balance2D_a05->Fill(ptavgtp, jet_eta, balance, evtwt);
+            h->Muonjet_balance_a05->Fill(ptavgtp, balance, evtwt);
+            h->Muonjet_balance2D_a05->Fill(ptavgtp, jet_eta, balance, evtwt);
           }
           if (alpha < 0.6) {
-            h->photonjet_balance_a06->Fill(ptavgtp, balance, evtwt);
-            h->photonjet_balance2D_a06->Fill(ptavgtp, jet_eta, balance, evtwt);
+            h->Muonjet_balance_a06->Fill(ptavgtp, balance, evtwt);
+            h->Muonjet_balance2D_a06->Fill(ptavgtp, jet_eta, balance, evtwt);
           }
 
-          // 3D balance profiles (KEY for L3 residual derivation)
+          // 3D balance profiles (KEY HISTOGRAMS for L3 residual derivation)
           // Fill with CUMULATIVE alpha cuts (matching dijet analyse.cc pattern)
           // Alpha bins are read from histograms::alphavalues array
           // Each event with alpha < threshold is filled into the bin corresponding to threshold
@@ -1348,24 +886,28 @@ void analyse_ZJet(string input = "ZJETHP",
             // Loop over alpha thresholds from histograms::alphavalues (skip first bin which is 0)
             for (unsigned int ia = 1; ia <= histograms::nalphavalues; ++ia) {
               double alphaThreshold = histograms::alphavalues[ia];
-              double alphaFillValue = alphaThreshold - 0.0001;
-
+              double alphaFillValue = alphaThreshold - 0.0001;  // Fill just below threshold to land in correct bin
+              
               if (alpha < alphaThreshold) {
                 // Fill balance profiles (weighted)
-                h->photonjet_balance3D->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dwide->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dnarrow->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dabseta->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dabsetawide->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
-                h->photonjet_balance3Dabsetanarrow->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
-
+                h->Muonjet_balance3D->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
+                h->Muonjet_balance3Dwide->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
+                h->Muonjet_balance3Dnarrow->Fill(ptavgtp, jet_eta, alphaFillValue, balance, evtwt);
+                h->Muonjet_balance3Dabseta->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                h->Muonjet_balance3Dabsetawide->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                h->Muonjet_balance3Dabsetanarrow->Fill(ptavgtp, abs(jet_eta), alphaFillValue, balance, evtwt);
+                
                 // Fill counts histograms (UNWEIGHTED - just count entries)
-                if (h->photonjet_balance3D_counts) h->photonjet_balance3D_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
-                if (h->photonjet_balance3Dwide_counts) h->photonjet_balance3Dwide_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
-                if (h->photonjet_balance3Dnarrow_counts) h->photonjet_balance3Dnarrow_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
-                if (h->photonjet_balance3Dabseta_counts) h->photonjet_balance3Dabseta_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
-                if (h->photonjet_balance3Dabsetawide_counts) h->photonjet_balance3Dabsetawide_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
-                if (h->photonjet_balance3Dabsetanarrow_counts) h->photonjet_balance3Dabsetanarrow_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
+                if (h->Muonjet_balance3D_counts) h->Muonjet_balance3D_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
+                if (h->Muonjet_balance3Dwide_counts) h->Muonjet_balance3Dwide_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
+                if (h->Muonjet_balance3Dnarrow_counts) h->Muonjet_balance3Dnarrow_counts->Fill(ptavgtp, jet_eta, alphaFillValue);
+                if (h->Muonjet_balance3Dabseta_counts) h->Muonjet_balance3Dabseta_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
+                if (h->Muonjet_balance3Dabsetawide_counts) h->Muonjet_balance3Dabsetawide_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
+                if (h->Muonjet_balance3Dabsetanarrow_counts) h->Muonjet_balance3Dabsetanarrow_counts->Fill(ptavgtp, abs(jet_eta), alphaFillValue);
+                
+                // Fill balance distribution (Muon_pT, alpha, balance_value)
+                // Fill with weight for each cumulative alpha cut
+                if (h->Muonjet_balance_dist) h->Muonjet_balance_dist->Fill(ptavgtp, alphaFillValue, balance, evtwt);
               }
             }
           }
@@ -1375,19 +917,22 @@ void analyse_ZJet(string input = "ZJETHP",
 
     // Additional jet histograms for all jets in the event
     for (int j = 0; j < nref; ++j) {
+
       for (auto &histrange : _histos) {
         for (auto &h : histrange.second) {
-          if (jteta[j] >= h->etamin && jteta[j] < h->etamax &&
-              hiBin >= h->hibinmin && hiBin < h->hibinmax) {
 
-            if (checkjetid && passjetid[j] == 0) continue;
+          if (jteta[j] >= h->etamin and jteta[j] < h->etamax and
+              hiBin >= h->hibinmin and hiBin < h->hibinmax) {
+
+            if (checkjetid and passjetid[j] == 0)
+              continue;
 
             h->jetetaphi->Fill(jteta[j], jtphi[j], weight);
 
-            if (j == 0 && passjetid[0]) {
-              // trigger check; leading jet pt
-              if (trigger)
-                h->HLTPhoton30->Fill(jtpt[awayJetIndices[0]], evtwt);
+            if (j == 0 and passjetid[0]) {
+              // Muon trigger check; leading jet pt
+              if (HLT_PPRefL2SingleMu12)
+                h->HLT_PPRefL2SingleMu12->Fill(jtpt[awayJetIndices[0]], evtwt);
             }
 
             // These are actually obsolete after all the selections
@@ -1407,12 +952,15 @@ void analyse_ZJet(string input = "ZJETHP",
             h->jet_phi->Fill(jtphi[j], evtwt);
 
             if (isMC) {
+
               h->genjet_pt->Fill(jtpt_gen[j], evtwt);
               h->genjet_eta->Fill(jteta_gen[j], evtwt);
               h->genjet_phi->Fill(jtphi_gen[j], evtwt);
 
               h->jetresponse->Fill(jtpt_gen[j], jtpt[j] / jtpt_gen[j], evtwt);
+
               h->ptres->Fill((jtpt[j] - jtpt_gen[j]) / jtpt_gen[j], evtwt);
+
               h->ptgenvsptreco->Fill(jtpt_gen[j], jtpt[j], evtwt);
               h->ptrecovsweight->Fill(jtpt[j], weight);
               h->ptgenvsweight->Fill(jtpt_gen[j], weight);
@@ -1436,60 +984,8 @@ void analyse_ZJet(string input = "ZJETHP",
     }
   } // end of event loop
 
-    // Print summary
-  cout << "\n========================================" << endl;
-  cout << "Z+Jet Analysis Summary" << endl;
-  cout << "========================================" << endl;
-  cout << "Total events processed: " << (i_processed < nentries ? i_processed : nentries) << endl;
-  cout << endl;
-  
-  cout << "--- Z Reconstruction ---" << endl;
-  if (channel == "muon" || channel == "both") {
-    cout << "Events with muon Z: " << nEventsWithMuonZ 
-         << " (" << 100.0*nEventsWithMuonZ/nentries << "%)" << endl;
-  }
-  if (channel == "electron" || channel == "both") {
-    cout << "Events with electron Z: " << nEventsWithElectronZ 
-         << " (" << 100.0*nEventsWithElectronZ/nentries << "%)" << endl;
-  }
-  
-  if (isMC) {
-    cout << "Events with gen-level Z: " << nEventsWithGenZ 
-         << " (" << 100.0*nEventsWithGenZ/nentries << "%)" << endl;
-  }
-  cout << endl;
-  
-  cout << "--- Selection Flow ---" << endl;
-  Long64_t nWithZ = (channel == "muon") ? nEventsWithMuonZ : 
-                    (channel == "electron") ? nEventsWithElectronZ :
-                    (nEventsWithMuonZ + nEventsWithElectronZ);
-  
-  cout << "Events with Z:              " << nWithZ << " (100%)" << endl;
-  cout << "  + has jets:               " << nEvents_hasJets 
-       << " (" << 100.0*nEvents_hasJets/nWithZ << "%)" << endl;
-  cout << "  + Z_pT > 60 GeV:          " << nEvents_ZptCut 
-       << " (" << 100.0*nEvents_ZptCut/nWithZ << "%)" << endl;
-  cout << "  + has away-side jet:      " << nEvents_hasAwayJet 
-       << " (" << 100.0*nEvents_hasAwayJet/nWithZ << "%)" << endl;
-  cout << "  + passes veto map:        " << nEventsPassedSelection 
-       << " (" << 100.0*nEventsPassedSelection/nWithZ << "%)" << endl;
-  cout << endl;
-  
-  if (isMC) {
-    cout << "--- Gen-Matching (MC only) ---" << endl;
-    cout << "Events passed with gen-Z: " << nEventsPassedWithGenZ << endl;
-    if (nEventsPassedSelection > 0) {
-      float genMatchEff = 100.0 * nEventsPassedWithGenZ / nEventsPassedSelection;
-      cout << "Gen-matching efficiency: " << genMatchEff << "%" << endl;
-    }
-    cout << endl;
-  }
-  
-  cout << "========================================" << endl;
-  cout << "FINAL: " << nEventsPassedSelection << " events passed all selections" << endl;
-  cout << "========================================\n" << endl;
-
   // Write output histograms
+
   for (auto &histrange : _histos) {
     for (auto &h : histrange.second) {
       h->Write();
@@ -1500,7 +996,7 @@ void analyse_ZJet(string input = "ZJETHP",
   // Write and close output file
   outfile->Write();
   cout << "Wrote " << outputfilename.c_str() << endl;
-
+  
   // Close file properly - TFile destructor handles all owned histogram cleanup
   outfile->Close();
   delete outfile;
