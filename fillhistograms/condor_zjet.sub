@@ -1,0 +1,18 @@
+# HTCondor submit file for Z+Jet analysis
+# Submit with: condor_submit condor_zjet.sub
+
+universe    = vanilla
+executable  = run_zjet_job.sh
+arguments   = $(input_key) $(is_mc) $(output_tag) $(batch_index) $(total_batches)
+
+# Condor event log must be on a local filesystem (not EOS)
+log         = /tmp/condor_zjet.log
+
+# stdout/stderr are handled by the script itself (redirected to EOS)
+
+should_transfer_files = NO
++JobFlavour = "workday"
+request_cpus   = 1
+request_memory = 4000
+
+queue input_key,is_mc,output_tag,batch_index,total_batches from zjet_jobs.txt

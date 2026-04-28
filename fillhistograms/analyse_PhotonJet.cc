@@ -382,7 +382,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     photonTree->SetBranchAddress("pho_genMatchedIndex", &pho_genMatchedIndex);
   }
 
-  // TODO: Add electron veto for photons
+  //TODO: Add electron veto for photons
 
   auto pthatWeights =
       LoadPthatWeights("jecfiles/2024_PP_30_170_pthat_weights.txt");
@@ -443,6 +443,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
   eventhistograms *eh = new eventhistograms(dir, isMC);
 
+  
 #if REDOJES == 1
   log(LOG_INFO, "Applying MC JEC from file " + jecfile);
   vector<string> JECFiles;
