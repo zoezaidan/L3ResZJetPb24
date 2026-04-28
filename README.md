@@ -1,31 +1,47 @@
-# Residual Analysis Framework
+# residualanalysis
 
-Residual-analysis workflows for L2 residuals, JER, and L3 residuals using ppRef HiForest inputs.
+Repository for deriving jet energy calibration and resolution products from HiForest ntuples and merged histogram ROOT files.
 
-The repository now uses a single top-level README for setup and quick-start commands. Detailed step-by-step documentation lives under `docs/`.
+Active workflows in this repository:
 
-## Clone and environment
+- L2 residual JEC from dijet asymmetry
+- L3 residual JEC from photon+jet balance
+- MC truth JER fits and JER scale factors
+- batch submission for histogram production
 
-Tested inside CMSSW `CMSSW_15_1_0_patch3`.
+The codebase started from a 2023 ppRef dijet L2/JER workflow and now also contains the in-progress 2024 ppRef and OO L2/L3 workflows. The main correction paths are still direct-balance based.
+
+Legacy 2023 input forests used in the cleaned-up repository lived under:
+
+`/eos/cms/store/group/phys_heavyions/lamartik/DIJET_JEC_FORESTS/`
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `fillhistograms/` | histogram production for dijet, photon+jet, and JER inputs |
+| `L2Residual/` | dijet L2 residual derivation, alpha fits, pT fits, and text export |
+| `L3Residual/` | photon+jet L3 residual derivation, shared fits, and L2L3 export |
+| `JER/` | MC truth resolution and JER scale-factor derivations |
+| `batch/` | HTCondor submission and output merging for histogram production |
+| `docs/` | current workflow documentation |
+| `triggerstudy/` | trigger turn-on studies and related plotting |
+
+## Environment setup
+
+You need a CMS environment with ROOT and the JetMET dependencies available. Any compatible CMSSW release can work for the histogram-filling step; the current docs use `CMSSW_15_1_0_patch3` as an example.
+
+Typical setup:
 
 ```bash
 cmsrel CMSSW_15_1_0_patch3
 cd CMSSW_15_1_0_patch3/src
 cmsenv
-```
-
-Create a Fork of this repository for your own use and development or directly use this repository.
-
-```bash
-git clone -b L3ResPhotonJet https://gitlab.cern.ch/bharikri/residualanalysis.git
+git clone <your-project-url>
 cd residualanalysis
 ```
 
-If ROOT is not already available in your shell and you are not using CMSSW, use the LCG fallback noted in the detailed docs.
-
-## Build helper classes
-
-Run this when you change histogram classes, binning, or ACLiC-built helper code:
+Compile helper classes after changing histogram definitions or shared histogram headers:
 
 ```bash
 cd fillhistograms
@@ -33,63 +49,106 @@ root -l -b -q compile.C
 cd ..
 ```
 
-## Quick workflows
+## Before you run
 
-### L2 residuals
+- `fillhistograms/settings.h` controls the JEC and JER payloads applied during histogram filling.
+- `fillhistograms/jecfiles/` stores payloads used both during histogram production and in exported text files.
+- The cleaned-up 2023 code was still written for a fairly narrow set of datasets. If you adapt the workflows to a new dataset, verify trigger logic, alpha and pT binning, eta selections, and downstream post-processing macros rather than assuming they are fully generic.
+- In the dijet filler, the most common hard-coded switches to check are `applyjetvetomap`, `isrun3jersf`, and `usecalotrig`.
+- Batch mode only fills histograms. Merge the shard outputs first, then run the downstream L2, JER, or L3 derivation and fit macros on the merged ROOT file.
 
-Histogram production is driven by `fillhistograms/analyse.cc`. The derivation and fitting stages are in `L2Residual/`.
+## Workflow overview
 
-```bash
-cd fillhistograms
-root -l -b -q 'analyse.cc("RERECOMC","l2_mc",true,true,false,false,false,false,15,"era",-1,10000,"../test_output/L2",-1,1,"ak4PFJetAnalyzer/t")'
-root -l -b -q 'analyse.cc("RERECOHP","l2_data",false,true,false,false,false,false,15,"era",-1,10000,"../test_output/L2",-1,1,"ak4PFJetAnalyzer/t")'
-cd ..
+### 1. Histogram production
 
-root -l -b -q 'L2Residual/deriveL2_from3D.C("test_output/L2/PHOTONMC_l2_mc.root","test_output/L2/PHOTONHP_l2_data.root","test_output/L2/L2_derived.root",5,true,false)'
-root -l -b -q 'L2Residual/dofits.C("test_output/L2/L2_derived.root","test_output/L2/L2_derived.root",0.15,0.35,"kfactor_test","L2fits",true)'
-root -l -b -q 'L2Residual/fit_pt_param.C("test_output/L2/L2_derived.root","test_output/L2/L2_derived.root",60.,700.,"ptparam_test","ptfits",true)'
-root -l -b -q 'L2Residual/doTxt.C("L2fits/kfactor_test.root","test_output/L2/L2Residual_test.txt")'
-```
+Main entry points:
 
-### JER and JER scale factors
+- `fillhistograms/analyse.cc` for dijet L2 residual and JER inputs
+- `fillhistograms/analyse_PhotonJet.cc` for photon+jet L3 inputs
+- `batch/submit_condor.py` and `batch/merge_outputs.sh` for Condor production
 
-JER depends on dijet histogram production with the asymmetry and response 3D histograms enabled.
+The local fillers support the same basic input modes used throughout the repository: `era`, `file`, `directory`, and `filelist`.
 
-```bash
-root -l -b -q 'JER/JERSF_RMS.C("JER/JERSF_sigmas_RMS.root","mc_forjer.root","zb_forjer.root","hp_forjer.root")'
-root -l -b -q 'JER/JERSF_fits.C("JER/JERSF_sigmas_fits.root","mc_forjer.root","zb_forjer.root","hp_forjer.root")'
-root -l -b -q 'JER/JERSF_fits_vsalpha.C("JER/JERSF_sigmas_fits.root","JER/JERSFs_fromfits.root",false)'
-root -l -b -q 'JER/JERSF_printtxt.C("JER/JERSFs_fromfits.root","JER/JERSF_fromfits.txt")'
-```
+### 2. L2 residuals
 
-### L3 residuals
+Minimal chain:
 
-Photon+jet histogram production is in `fillhistograms/analyse_PhotonJet.cc`, followed by `L3Residual/deriveL3_from_photonjet.C` and `L3Residual/dofits_L3.C`.
+1. Fill dijet histograms with `fillhistograms/analyse.cc` using `dol2res=true`.
+2. Derive MC/data response ratios with `L2Residual/deriveL2_from3D.C`.
+3. Fit the alpha dependence with `L2Residual/dofits.C`.
+4. Optionally fit the pT dependence with `L2Residual/fit_pt_param.C`.
+5. Export payloads with one of:
+	- `L2Residual/doTxt.C`
+	- `L2Residual/L2res_param_txt.C`
+	- `L2Residual/L2res_Run3param_txt.C`
 
-```bash
-cd fillhistograms
-root -l -b -q 'analyse_PhotonJet.cc("/path/to/filelist_mc.txt","photonjet_mc",true,true,"filelist",-1,-1,"/output/dir")'
-root -l -b -q 'analyse_PhotonJet.cc("/path/to/filelist_data.txt","photonjet_data",false,true,"filelist",-1,-1,"/output/dir")'
-cd ..
+The detailed step-by-step interface, argument tables, and example commands are in `docs/L2Residual.md`.
 
-root -l -b -q 'L3Residual/deriveL3_from_photonjet.C("/output/dir/filelist_mc_photonjet_mc.root","/output/dir/filelist_data_photonjet_data.root","L3Residual/L3_derived_photonjet.root",true,5,false,true)'
-root -l -b -q 'L3Residual/dofits_L3.C("L3Residual/L3_derived_photonjet.root",60,300,"L3Res_photonjet",false,"2024ppRef","pp 480.4 pb^{-1}",true,false)'
-```
+### 3. JER and JER scale factors
 
-## Documentation map
+For histogram filling in the dijet chain:
 
-- `docs/L2Residual.md`: dijet histogram filling, data/MC propagation, alpha fits, eta fits, and text outputs.
-- `docs/JER.md`: MC truth resolution, JER scale-factor derivation, alpha extrapolation, and text exports.
-- `docs/L3Residual.md`: photon+jet cuts, histogram contracts, derivation, kFSR handling, and final L3 text output.
-- `docs/Systematics.md`: L2 systematic-uncertainty production and text-file exports.
-- `docs/Batch.md`: batch inputs, submission helpers, and merge flow.
-- `docs/residualanalysis.wiki/residualanalysis.md`: GitLab wiki landing page linking the same material.
+- use `dojer=true` for truth-response studies
+- use `fillforJER=true` for asymmetry distributions used in scale-factor extraction
 
-## Batch processing
+MC truth resolution chain:
 
-The submission helpers stay in `batch/`, but the user-facing instructions are consolidated in `docs/Batch.md`.
+- `JER/MCJER.C`
+- `JER/MCJPR.C`
+- `JER/MCRESP.C`
+- `JER/doTxtMCJER.C`
+
+JER scale-factor chain:
+
+1. width extraction with either:
+	- `JER/JERSF_fits.C`
+	- `JER/JERSF_RMS.C`
+2. alpha extrapolation with `JER/JERSF_fits_vsalpha.C`
+3. text export with `JER/JERSF_printtxt.C`
+
+Apply the intended L2 residual correction before deriving JER scale factors.
+
+Detailed signatures and outputs are documented in `docs/JER.md`.
+
+### 4. L3 residuals
+
+Active split workflow:
+
+`deriveL3_from_photonjet.C -> L3Res.C -> createL2L3ResTextFile.C`
+
+Minimal chain:
+
+1. Fill photon+jet histograms with `fillhistograms/analyse_PhotonJet.cc`.
+2. Derive the response-ratio inputs with `L3Residual/deriveL3_from_photonjet.C`.
+3. Run the shared pTref fit with `L3Residual/L3Res.C`.
+4. Export standalone L3 and combined L2L3 text payloads with `L3Residual/createL2L3ResTextFile.C`.
+
+For the current photon+jet path, `L3Residual/runL3RES.C` can also be used as a wrapper that runs input plotting, derivation, fitting, and text export in one go.
+
+Detailed signatures, sample combinations, and example commands are in `docs/L3Residual.md`.
+
+### 5. Batch workflow
+
+Batch helpers only cover histogram production:
+
+1. submit with `batch/submit_condor.py`
+2. merge with `batch/merge_outputs.sh`
+3. run the downstream L2, JER, or L3 macros on the merged ROOT file
+
+See `docs/Batch.md` for the full submission interface and options.
+
+## Documentation
+
+The current workflow documentation lives in `docs/`:
+
+- `docs/WikiHome.md`
+- `docs/L2Residual.md`
+- `docs/JER.md`
+- `docs/L3Residual.md`
+- `docs/Systematics.md`
+- `docs/Batch.md`
 
 ## Notes
 
-- `triggerstudy/plottriggereff.C` contains the trigger-efficiency plotting utility.
-- Existing example outputs in `L2fits/`, `L3Residual/`, and `test_output/` are not part of the documentation flow.
+- Several older 2023 payloads and helper files are still kept for comparison, legacy reprocessing, or cross-checks.
+- If you change histogram definitions or branch handling, rerun `fillhistograms/compile.C` before launching new production.

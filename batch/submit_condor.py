@@ -18,7 +18,6 @@ import os
 import sys
 import argparse
 import subprocess
-from pathlib import Path
 from datetime import datetime
 
 def count_files_recursive(path):
@@ -38,6 +37,31 @@ def count_files_filelist(path):
                 count += 1
     return count
 
+def ensure_x509_proxy(proxy_path):
+    """Ensure an X509 proxy exists. Create one if missing."""
+    if os.path.isfile(proxy_path):
+        print(f"X509 proxy: {proxy_path}")
+        return proxy_path
+
+    print(f"WARNING: X509 proxy not found at {proxy_path}")
+    print("Attempting to create proxy with: voms-proxy-init --rfc --voms cms")
+
+    cmd = ['voms-proxy-init', '--rfc', '--voms', 'cms', '--out', proxy_path]
+    try:
+        result = subprocess.run(cmd, text=True)
+    except FileNotFoundError:
+        print("Error: voms-proxy-init command not found in PATH.")
+        print("Please set up the grid environment and try again.")
+        sys.exit(1)
+
+    if result.returncode != 0 or not os.path.isfile(proxy_path):
+        print("Error: Failed to create X509 proxy.")
+        print("Run manually: voms-proxy-init --rfc --voms cms")
+        sys.exit(1)
+
+    print(f"Created X509 proxy: {proxy_path}")
+    return proxy_path
+
 def main():
     parser = argparse.ArgumentParser(description='Submit residualanalysis batch jobs to HTCondor')
     parser.add_argument('--era', required=True, help='Era/dataset name for output naming')
@@ -46,7 +70,7 @@ def main():
                         default='directory', help='Input type')
     parser.add_argument('--output-dir', required=True, help='Output directory')
     parser.add_argument('--output-tag', default='batch', help='Output tag')
-    parser.add_argument('--files-per-job', type=int, default=50, help='Files per job')
+    parser.add_argument('--files-per-job', type=int, default=10, help='Files per job')
     parser.add_argument('--events-per-job', type=int, default=-1, help='Max events per job (-1=all)')
     parser.add_argument('--max-jobs', type=int, default=-1, help='Max number of jobs to submit (-1=all)')
     parser.add_argument('--mc', action='store_true', help='Is MC sample')
@@ -56,7 +80,7 @@ def main():
     parser.add_argument('--flavour', default='workday',
                         choices=['espresso', 'microcentury', 'longlunch', 'workday', 'tomorrow'],
                         help='HTCondor job flavour')
-    parser.add_argument('--jet-tree', default='ak4PFJetAnalyzer/t',
+    parser.add_argument('--jet-tree', default='ak4PFJetAnalyzerSDZcut1/t',
                         help='Jet tree path (e.g. ak4PFJetAnalyzer/t, ak4PFJetAnalyzerSDZcut1/t)')
     parser.add_argument('--dry-run', action='store_true', help='Create files but do not submit')
 
@@ -66,6 +90,10 @@ def main():
     base_dir = '/eos/home-b/bharikri/lxplus_private/EGamma/residualanalysis'
     analysis_dir = os.path.join(base_dir, 'fillhistograms')
     cmssw_base = '/eos/home-b/bharikri/lxplus_private/EGamma/CMSSW_15_1_0_patch3/src'
+
+    # Find or create X509 grid proxy for remote file access
+    x509_proxy = os.environ.get('X509_USER_PROXY', f'/tmp/x509up_u{os.getuid()}')
+    x509_proxy = ensure_x509_proxy(x509_proxy)
 
     # Count total files
     if args.input_type == 'directory':
@@ -124,6 +152,10 @@ echo "Jet ID: $JET_ID"
 echo "Jet tree: $JET_TREE"
 echo "Batch: $BATCH_INDEX of $TOTAL_BATCHES"
 
+# Setup X509 proxy for xrootd access
+export X509_USER_PROXY=${{X509_USER_PROXY:-{x509_proxy}}}
+echo "X509 proxy: $X509_USER_PROXY"
+
 # Setup CMSSW
 cd {cmssw_base}
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -166,6 +198,8 @@ error = {batch_dir}/logs/job_$(Process).err
 log = {batch_dir}/logs/condor.log
 
 should_transfer_files = NO
+x509userproxy = {x509_proxy}
+use_x509userproxy = true
 +JobFlavour = "{args.flavour}"
 request_cpus = 1
 request_memory = 4000
