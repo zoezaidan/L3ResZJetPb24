@@ -108,7 +108,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
                        int maxEvents = -1, string outputDir = "",
                        int batchIndex = -1, int totalBatches = 1,
                        string jetPath = "ak4PFJetAnalyzer/t",
-                       float jtptlimitforalpha = 15) {
+                       float jtptlimitforalpha = 15, AnalysisType analysisType = AnalysisType::PHOTONJET) {
 
   if (debug && g_verbosity < LOG_TRACE) {
     g_verbosity = LOG_TRACE;

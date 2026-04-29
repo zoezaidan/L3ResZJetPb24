@@ -367,14 +367,14 @@ float ExtractJetRadius(const std::string& jetPath) {
 // Z+Jet analysis for L3 residual corrections
 // jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t"
 // analysisType: ZJET_MUMU, ZJET_EE, or ZJET (combined)
-void analyse_ZJet(string input = "ZJETHP",
+void analyse_ZJet(string input = "ZJETSM_0",
                   string outputfiletag = "AK4_zjet",
                   bool isMC = false, bool checkjetid = false,
                   string inputType = "era", int maxFiles = -1,
                   int maxEvents = -1, string outputDir = "",
                   int batchIndex = -1, int totalBatches = 1,
                   string jetPath = "ak4PFJetAnalyzer/t",
-                  float jtptlimitforalpha = 15,
+                  float jtptlimitforalpha = 15, 
                   AnalysisType analysisType = AnalysisType::ZJET_MUMU) {
 
   bool usecalotrig = false;
