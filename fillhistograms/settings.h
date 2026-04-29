@@ -26,7 +26,7 @@ TString vetomapFile = "jecfiles/Summer24Prompt24_RunBCDEFGHI.root";
 constexpr int MAXJETS = 50;
 
 float akradius = 0.4;
-Float_t jtptmin = 15.;
+Float_t jtptmin = 40.;
 
 float hibins[] = {-1, 0.}; //, 0., 5000.};
 const int nhibins = sizeof(hibins) / sizeof(hibins[0]) - 1;

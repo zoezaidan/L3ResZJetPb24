@@ -367,15 +367,15 @@ float ExtractJetRadius(const std::string& jetPath) {
 // Z+Jet analysis for L3 residual corrections
 // jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t"
 // analysisType: ZJET_MUMU, ZJET_EE, or ZJET (combined)
-void analyse_ZJet(string input = "ZJETHP",
+void analyse_ZJet(string input = "ZJETSM_0",
                   string outputfiletag = "AK4_zjet",
                   bool isMC = false, bool checkjetid = false,
                   string inputType = "era", int maxFiles = -1,
                   int maxEvents = -1, string outputDir = "",
                   int batchIndex = -1, int totalBatches = 1,
                   string jetPath = "ak4PFJetAnalyzer/t",
-                  AnalysisType analysisType = AnalysisType::ZJET_MUMU,
-                  float jtptlimitforalpha = 15) {
+                  float jtptlimitforalpha = 15, 
+                  AnalysisType analysisType = AnalysisType::ZJET_MUMU) {
 
   bool usecalotrig = false;
   bool checkvalidjet = false; // this is for checking valid jet range after applying l2. now for
@@ -1101,7 +1101,7 @@ void analyse_ZJet(string input = "ZJETHP",
     //double djrespasymm;
 
     // Z pt selection
-    if (Z_pt < 60) continue;
+    if (Z_pt < 40) continue;
 
     nEvents_ZptCut++;
 
@@ -1547,7 +1547,7 @@ void analyse_ZJet(string input = "ZJETHP",
                     " (" + (nWithZ > 0 ? std::string("100%") : std::string("n/a")) + ")");
   log(LOG_INFO, "  + has jets:               " + std::to_string(nEvents_hasJets) +
                     " (" + formatPercent(nEvents_hasJets, nWithZ) + ")");
-  log(LOG_INFO, "  + Z_pT > 60 GeV:          " + std::to_string(nEvents_ZptCut) +
+  log(LOG_INFO, "  + Z_pT > 40 GeV:          " + std::to_string(nEvents_ZptCut) +
                     " (" + formatPercent(nEvents_ZptCut, nWithZ) + ")");
   log(LOG_INFO, "  + has away-side jet:      " +
                     std::to_string(nEvents_hasAwayJet) + " (" +

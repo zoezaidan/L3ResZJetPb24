@@ -11,6 +11,7 @@ Usage:
         --output-tag photonjet_v1 \
         --files-per-job 50 \
         --analysis PhotonJet \
+        --compile \
         --dry-run
 """
 
@@ -18,7 +19,60 @@ import os
 import sys
 import argparse
 import subprocess
+from pathlib import Path
 from datetime import datetime
+
+
+def build_environment_setup(cmssw_base):
+    """Return shell commands to setup the requested environment."""
+    if not cmssw_base:
+        return 'echo "Using inherited environment"\n'
+
+    return f'''
+cd {cmssw_base}
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+eval "$(scramv1 runtime -sh)"
+'''
+
+
+def compile_root_helpers(analysis_dir, cmssw_base=None):
+    """Compile ROOT helper libraries using either CMSSW or the inherited environment."""
+    compile_cmd = f'''
+set -e
+{build_environment_setup(cmssw_base)}
+cd {analysis_dir}
+root -l -b -q 'compile.C(true)'
+'''
+    subprocess.run(['bash', '-lc', compile_cmd], check=True)
+
+
+def build_root_command(analysis):
+    """Return the ROOT macro invocation string for the selected analysis."""
+    if analysis == 'PhotonJet':
+        return ('analyse_PhotonJet.cc(\\"$INPUT_PATH\\", \\"$OUTPUT_TAG\\", '
+                '$IS_MC, $JET_ID, \\"$INPUT_TYPE\\", $MAX_FILES, $MAX_EVENTS, '
+                '\\"$OUTPUT_DIR\\", $BATCH_INDEX, $TOTAL_BATCHES, \\"$JET_TREE\\", "$JET_PTLIMFORALPHA, AnalysisType::PHOTONJET)')
+
+    if analysis == 'ZJet_Mu' or analysis == 'ZJet':
+        return ('analyse_ZJet.cc(\\"$INPUT_PATH\\", \\"$OUTPUT_TAG\\", '
+                '$IS_MC, $JET_ID, \\"$INPUT_TYPE\\", $MAX_FILES, $MAX_EVENTS, '
+                '\\"$OUTPUT_DIR\\", $BATCH_INDEX, $TOTAL_BATCHES, \\"$JET_TREE\\", $JET_PTLIMFORALPHA, AnalysisType::ZJET_MUMU)')
+
+    if analysis == 'ZJet_Ele':
+        return ('analyse_ZJet.cc(\\"$INPUT_PATH\\", \\"$OUTPUT_TAG\\", '
+                '$IS_MC, $JET_ID, \\"$INPUT_TYPE\\", $MAX_FILES, $MAX_EVENTS, '
+                '\\"$OUTPUT_DIR\\", $BATCH_INDEX, $TOTAL_BATCHES, \\"$JET_TREE\\", "$JET_PTLIMFORALPHA, AnalysisType::ZJET_ELE)')
+
+    if analysis == 'Dijet':
+        return ('analyse_Dijet.cc(\\"$INPUT_PATH\\", \\"$OUTPUT_TAG\\", '
+                '$IS_MC, $JET_ID, false, false, false, false, $JET_PTLIMFORALPHA, '
+                '\\"$INPUT_TYPE\\", $MAX_FILES, $MAX_EVENTS, \\"$OUTPUT_DIR\\", '
+                '$BATCH_INDEX, $TOTAL_BATCHES, \\"$JET_TREE\\")')
+
+    raise ValueError(
+        'JER batch submission is not supported by submit_condor.py yet. '
+        'analyse_JER expects the older era-based interface and no file splitting.'
+    )
 
 def count_files_recursive(path):
     """Count ROOT files in directory recursively"""
@@ -37,31 +91,6 @@ def count_files_filelist(path):
                 count += 1
     return count
 
-def ensure_x509_proxy(proxy_path):
-    """Ensure an X509 proxy exists. Create one if missing."""
-    if os.path.isfile(proxy_path):
-        print(f"X509 proxy: {proxy_path}")
-        return proxy_path
-
-    print(f"WARNING: X509 proxy not found at {proxy_path}")
-    print("Attempting to create proxy with: voms-proxy-init --rfc --voms cms")
-
-    cmd = ['voms-proxy-init', '--rfc', '--voms', 'cms', '--out', proxy_path]
-    try:
-        result = subprocess.run(cmd, text=True)
-    except FileNotFoundError:
-        print("Error: voms-proxy-init command not found in PATH.")
-        print("Please set up the grid environment and try again.")
-        sys.exit(1)
-
-    if result.returncode != 0 or not os.path.isfile(proxy_path):
-        print("Error: Failed to create X509 proxy.")
-        print("Run manually: voms-proxy-init --rfc --voms cms")
-        sys.exit(1)
-
-    print(f"Created X509 proxy: {proxy_path}")
-    return proxy_path
-
 def main():
     parser = argparse.ArgumentParser(description='Submit residualanalysis batch jobs to HTCondor')
     parser.add_argument('--era', required=True, help='Era/dataset name for output naming')
@@ -70,30 +99,40 @@ def main():
                         default='directory', help='Input type')
     parser.add_argument('--output-dir', required=True, help='Output directory')
     parser.add_argument('--output-tag', default='batch', help='Output tag')
-    parser.add_argument('--files-per-job', type=int, default=10, help='Files per job')
+    parser.add_argument('--files-per-job', type=int, default=50, help='Files per job')
     parser.add_argument('--events-per-job', type=int, default=-1, help='Max events per job (-1=all)')
     parser.add_argument('--max-jobs', type=int, default=-1, help='Max number of jobs to submit (-1=all)')
     parser.add_argument('--mc', action='store_true', help='Is MC sample')
     parser.add_argument('--jet-id', action='store_true', help='Apply jet ID cuts')
-    parser.add_argument('--analysis', choices=['PhotonJet', 'Dijet', 'JER'],
+    parser.add_argument('--analysis', choices=['PhotonJet','ZJet' , 'ZJet_Mu','ZJet_Ele', 'Dijet', 'JER'],
                         default='PhotonJet', help='Analysis type')
     parser.add_argument('--flavour', default='workday',
                         choices=['espresso', 'microcentury', 'longlunch', 'workday', 'tomorrow'],
                         help='HTCondor job flavour')
-    parser.add_argument('--jet-tree', default='ak4PFJetAnalyzerSDZcut1/t',
+    parser.add_argument('--jet-tree', default='ak4PFJetAnalyzer/t',
                         help='Jet tree path (e.g. ak4PFJetAnalyzer/t, ak4PFJetAnalyzerSDZcut1/t)')
+    parser.add_argument('--jet-ptlimforalpha', type=float, default=15,
+                        help='Jet pT limit for alpha calculation (default: 15 GeV)')
+    parser.add_argument('--compile', action='store_true',
+                        help='Compile ROOT helper libraries before creating jobs (default: disabled)')
+    parser.add_argument('--cmssw-base', default='',
+                        help='Optional CMSSW base to source before compilation/job execution; by default use the current environment')
     parser.add_argument('--dry-run', action='store_true', help='Create files but do not submit')
 
     args = parser.parse_args()
 
+    if args.analysis == 'JER':
+        parser.error(
+            'JER batch submission is not supported by submit_condor.py yet; '
+            'use analyse_JER directly or extend the wrapper for the legacy interface.'
+        )
+
     # Setup paths
     base_dir = '/eos/home-b/bharikri/lxplus_private/EGamma/residualanalysis'
     analysis_dir = os.path.join(base_dir, 'fillhistograms')
-    cmssw_base = '/eos/home-b/bharikri/lxplus_private/EGamma/CMSSW_15_1_0_patch3/src'
 
-    # Find or create X509 grid proxy for remote file access
-    x509_proxy = os.environ.get('X509_USER_PROXY', f'/tmp/x509up_u{os.getuid()}')
-    x509_proxy = ensure_x509_proxy(x509_proxy)
+    if args.cmssw_base and not os.path.isdir(args.cmssw_base):
+        parser.error(f'CMSSW base does not exist: {args.cmssw_base}')
 
     # Count total files
     if args.input_type == 'directory':
@@ -127,10 +166,27 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
+    if args.compile:
+        if args.cmssw_base:
+            print(f"Compiling ROOT helper libraries with CMSSW environment: {args.cmssw_base}")
+        else:
+            print("Compiling ROOT helper libraries with the inherited environment...")
+        try:
+            compile_root_helpers(analysis_dir, args.cmssw_base or None)
+        except subprocess.CalledProcessError as exc:
+            print(f"Error: failed to compile ROOT helper libraries ({exc})")
+            sys.exit(1)
+    else:
+        print("Skipping ROOT helper library compilation (use --compile to enable).")
+
+    root_command = build_root_command(args.analysis)
+
     # Create job wrapper script
     wrapper_path = os.path.join(batch_dir, 'run_job.sh')
     wrapper_content = f'''#!/bin/bash
 # Job wrapper for residualanalysis batch
+
+set -euo pipefail
 
 ANALYSIS=$1
 INPUT_PATH=$2
@@ -144,6 +200,7 @@ OUTPUT_DIR=$9
 BATCH_INDEX=${{10}}
 TOTAL_BATCHES=${{11}}
 JET_TREE=${{12}}
+JET_PTLIMFORALPHA=${{13}}
 
 echo "Starting job at $(date)"
 echo "Analysis: $ANALYSIS"
@@ -152,20 +209,19 @@ echo "Jet ID: $JET_ID"
 echo "Jet tree: $JET_TREE"
 echo "Batch: $BATCH_INDEX of $TOTAL_BATCHES"
 
-# Setup X509 proxy for xrootd access
-export X509_USER_PROXY=${{X509_USER_PROXY:-{x509_proxy}}}
-echo "X509 proxy: $X509_USER_PROXY"
+# Setup environment if requested
+{build_environment_setup(args.cmssw_base or None)}
 
-# Setup CMSSW
-cd {cmssw_base}
-source /cvmfs/cms.cern.ch/cmsset_default.sh
-eval `scramv1 runtime -sh`
+if ! command -v root >/dev/null 2>&1; then
+    echo "Error: root is not available in the current environment" >&2
+    exit 1
+fi
 
 # Go to analysis directory
 cd {analysis_dir}
 
 # Run analysis
-root -l -b -q "analyse_${{ANALYSIS}}.cc(\\"$INPUT_PATH\\", \\"$OUTPUT_TAG\\", $IS_MC, $JET_ID, \\"$INPUT_TYPE\\", $MAX_FILES, $MAX_EVENTS, \\"$OUTPUT_DIR\\", $BATCH_INDEX, $TOTAL_BATCHES, \\"$JET_TREE\\")"
+root -l -b -q "{root_command}"
 
 echo "Job completed at $(date)"
 '''
@@ -181,7 +237,7 @@ echo "Job completed at $(date)"
 
     with open(args_file, 'w') as f:
         for i in range(total_jobs):
-            line = f"{args.analysis} {args.input} {args.output_tag} {is_mc} {jet_id} {args.input_type} {args.files_per_job} {args.events_per_job} {args.output_dir} {i} {total_jobs} {args.jet_tree}\n"
+            line = f"{args.analysis} {args.input} {args.output_tag} {is_mc} {jet_id} {args.input_type} {args.files_per_job} {args.events_per_job} {args.output_dir} {i} {total_jobs} {args.jet_tree} {args.jet_ptlimforalpha}\n"
             f.write(line)
 
     # Create condor submit file
@@ -198,8 +254,6 @@ error = {batch_dir}/logs/job_$(Process).err
 log = {batch_dir}/logs/condor.log
 
 should_transfer_files = NO
-x509userproxy = {x509_proxy}
-use_x509userproxy = true
 +JobFlavour = "{args.flavour}"
 request_cpus = 1
 request_memory = 4000

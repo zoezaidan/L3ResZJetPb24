@@ -503,7 +503,8 @@ public:
   //  static constexpr double ptforjec[] = {40, 55, 80, 120, 170, 1000};
   //  static constexpr double ptforjec[] = {15 , 25, 55, 80, 120, 170, 1000};   // Low pT as Nick
     // static constexpr double ptforjec[] = {15, 25, 80, 120, 1000};   // Low pT as Nick
-  static constexpr double ptforjec[] = {60, 70, 80, 90, 100, 120, 140, 160, 200, 300}; // Photon pT bins Bharad
+  // static constexpr double ptforjec[] = {60, 70, 80, 90, 100, 120, 140, 160, 200, 300}; // Photon pT bins Bharad
+  static constexpr double ptforjec[] = {40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 200}; // Z pT bins
   static constexpr unsigned int nptforjec = sizeof(ptforjec)/sizeof(ptforjec[0])-1;
 
   //  static constexpr double ptforJER[] = {15, 21, 28, 37, 49, 64, 84, 114,
