@@ -12,6 +12,7 @@ using std::endl;
 #include <cstdio>
 #include <ctime>
 #include <iterator>
+#include <random>
 #include <typeinfo>
 
 #include "configurations.h"
@@ -22,6 +23,7 @@ using std::endl;
 #include "helpers.h"
 #include "input_config.h"
 #include "chain_builder.h"
+#include "JetCorrector.h"
 
 R__LOAD_LIBRARY(histograms_C.so)
 R__LOAD_LIBRARY(eventhistograms_C.so)
@@ -34,9 +36,6 @@ float rho = 0.;
 std::mt19937 _mersennetwister;
 std::uint32_t _seed = 4;
 
-#if REDOJES == 1
-#include "CondFormats/JetMETObjects/interface/JetCorrectorParameters.h"
-#endif
 
 bool debug = false;
 bool applyjetvetomap = true;
@@ -790,16 +789,15 @@ void analyse_ZJet(string input = "ZJETHP",
 
 #if REDOJES == 1
   cout << "Applying MC JEC from file " << jecfile.c_str() << endl;
-  FactorizedJetCorrector *corr;
-  vector<JetCorrectorParameters> vpar;
-  vpar.push_back(JetCorrectorParameters(jecfile.c_str()));
+  vector<string> jecFiles;
+  jecFiles.push_back(jecfile);
   if (!isMC && !l2file.empty()) {
     cout << "Applying L2 Residual from file " << l2file.c_str() << endl;
-    vpar.push_back(JetCorrectorParameters(l2file.c_str()));
+    jecFiles.push_back(l2file);
   } else if (!isMC) {
     cout << "\033[1;31m[WARNING]: No L2 Residual file provided. Proceeding with MC-base JEC only.\033[0m" << endl;
   }
-  corr = new FactorizedJetCorrector(vpar);
+  JetCorrector *corr = new JetCorrector(jecFiles);
 #endif
 
   // JER not needed for photon+jet L3 residual analysis
@@ -834,7 +832,7 @@ void analyse_ZJet(string input = "ZJETHP",
   Long64_t nEvents_hasAwayJet = 0;
   Long64_t nEvents_passVeto = 0;
 
-  Long64_t i_processed = 0;
+  //Long64_t i_processed = 0;
   for (Long64_t i = 0; i < nentries; ++i) {
     evtTree->GetEntry(i);
     triggerTree->GetEntry(i);
@@ -848,8 +846,8 @@ void analyse_ZJet(string input = "ZJETHP",
     if (i % 10000 == 0) {
       cout << "Processing event " << i << " / " << nentries << endl;
     }
-    if (i == 40000000) break;
-    i_processed++;
+    //if (i == 40000000) break;
+    //i_processed++;
 
     // Trigger logic
     if (!isMC) {
@@ -1114,15 +1112,9 @@ void analyse_ZJet(string input = "ZJETHP",
       jtpt_uncorr[j] = jtpt[j];
 
 #if REDOJES == 1
-      // cout << "Applying JES" << endl;
-      corr->setJetPt(jtpt[j]);
-      // corr->setJetE(jteu[jetidx]);
-      corr->setJetEta(jteta[j]);
-      //     corr->setJetPhi(jthpi[j]);
-      vector<float> v = corr->getSubCorrections();
-      float jes = v.back();
-      //     cout << "New jes correction jet pt: " << jtpt[j] << " " <<
-      //jteta[j] << " "  << jes << endl;
+      corr->SetJetPT(jtpt[j]);
+      corr->SetJetEta(jteta[j]);
+      float jes = corr->GetCorrection();
       jtpt[j] *= jes;
 #endif
       // JER not applied for photon+jet L3 residual analysis
@@ -1437,7 +1429,7 @@ void analyse_ZJet(string input = "ZJETHP",
   cout << "\n========================================" << endl;
   cout << "Z+Jet Analysis Summary" << endl;
   cout << "========================================" << endl;
-  cout << "Total events processed: " << (i_processed < nentries ? i_processed : nentries) << endl;
+  //cout << "Total events processed: " << (i_processed < nentries ? i_processed : nentries) << endl;
   cout << endl;
   
   cout << "--- Z Reconstruction ---" << endl;

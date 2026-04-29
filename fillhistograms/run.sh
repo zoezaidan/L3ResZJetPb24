@@ -1,23 +1,43 @@
-# bools: isMC, jetID, iszb, l2res, JER SF, fillforJER
+#!/bin/bash
+set -e
 
+TAG=$1
 
-#root -l -q 'analyse.cc("RERECOHP", "AK4_PFTRIG_ID", false, true, false, false, false, false)'
+echo "Running job: $TAG"
 
-#root -l -q 'analyse.cc("RERECOHP", "AK4_PFTRIG_ID_l2res", false, true, false, true, false, false)'
-#root -l -q 'analyse.cc("RERECOHP", "AK4_PFTRIG_ID_l2res_forjer", false, true, false, true, false, true)'
+SCRATCH=${_CONDOR_SCRATCH_DIR:-$(pwd)}
 
-root -l -q 'analyse.cc("RERECOMC", "AK4_PFTRIG_ID_ppJERSF", true, true, false, false, false, false)'
-root -l -q 'analyse.cc("RERECOMC", "AK4_PFTRIG_ID_forjer_ppJERSF", true, true, false, false, false, true)'
-#root -l -q 'analyse.cc("RERECOMC", "AK4_PFTRIG_ID_jerclosure", true, true, false, false, true, false)'
+# Set up CMSSW environment
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+export SCRAM_ARCH=el9_amd64_gcc12
+cd /eos/home-z/zzaidanc/CMSSW_15_1_0_patch3/src
+eval $(scram runtime -sh)
+cd $SCRATCH
 
+# Set X509 proxy for xrootd access
+export X509_USER_PROXY=/eos/home-z/zzaidanc/x509up_zzaidanc
 
+# Detect if MC
+if [[ "$TAG" == *"MC"* ]]; then
+    IS_MC="true"
+else
+    IS_MC="false"
+fi
+echo "isMC: $IS_MC"
 
-#for VARIABLE in $(seq 0 19)
-#do
-#    root -l -q 'analyse.cc("RERECOZB'${VARIABLE}'", "AK4_PFTRIG_ID", false, true, true, false, false, false)'
-#    root -l -q 'analyse.cc("RERECOZB'${VARIABLE}'", "AK4_PFTRIG_ID_l2res", false, true, true, true, false, false)'
-#    root -l -q 'analyse.cc("RERECOZB'${VARIABLE}'", "AK4_PFTRIG_ID_l2res_forjer", false, true, true, true, false, true)'
-#done
+# Run the analysis (era mode: file path comes from configurations.h)
+root -l -b -q "analyse_ZJet.cc+(\"${TAG}\", \"AK4_zjet\", ${IS_MC}, false, \"era\", -1, -1, \".\")"
 
+# Copy output to EOS
+OUTFILE="${TAG}_AK4_zjet_ak4.root"
+if [ ! -f "$OUTFILE" ]; then
+    echo "ERROR: Output file ${OUTFILE} not found. Files present:"
+    ls *.root 2>/dev/null || echo "  none"
+    exit 1
+fi
 
+EOSDIR=root://eosuser.cern.ch//eos/home-z/zzaidanc/L3ResZJetpp24/Outputs/
+echo "Copying ${OUTFILE} to EOS..."
+xrdcp -f ${OUTFILE} ${EOSDIR}/${OUTFILE}
 
+echo "Done."
