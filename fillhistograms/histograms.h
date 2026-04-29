@@ -14,8 +14,41 @@ enum class AnalysisType {
   DIJET = 0,      // L2 Residual dijet analysis
   PHOTONJET = 1,  // L3 Residual photon+jet analysis
   ALL = 2,        // Create all histograms (default, backward compatible)
-  ZJET = 3        // L3 Residual Z+jet analysis
+  ZJET = 3,       // L3 Residual Z+jet analysis using both ee and mumu
+  ZJET_EE = 4,    // L3 Residual Z+jet analysis using dielectrons only
+  ZJET_MUMU = 5   // L3 Residual Z+jet analysis using dimuons only
 };
+
+inline bool isZJetAnalysisType(AnalysisType type) {
+  return type == AnalysisType::ZJET || type == AnalysisType::ZJET_EE ||
+         type == AnalysisType::ZJET_MUMU;
+}
+
+inline bool usesElectronZJetFlavor(AnalysisType type) {
+  return type == AnalysisType::ZJET || type == AnalysisType::ZJET_EE;
+}
+
+inline bool usesMuonZJetFlavor(AnalysisType type) {
+  return type == AnalysisType::ZJET || type == AnalysisType::ZJET_MUMU;
+}
+
+inline const char *analysisTypeName(AnalysisType type) {
+  switch (type) {
+  case AnalysisType::DIJET:
+    return "DIJET";
+  case AnalysisType::PHOTONJET:
+    return "PHOTONJET";
+  case AnalysisType::ALL:
+    return "ALL";
+  case AnalysisType::ZJET:
+    return "ZJET";
+  case AnalysisType::ZJET_EE:
+    return "ZJET_EE";
+  case AnalysisType::ZJET_MUMU:
+    return "ZJET_MUMU";
+  }
+  return "UNKNOWN";
+}
 
 class histograms {
 
@@ -46,6 +79,7 @@ public:
   TH1D* probe_pt;
   TH1D* probe_eta;
   TH1D* probe_phi;
+    TH1D* alphas;
 
   // Trigger
   TH1D *HLTZB;
@@ -156,12 +190,19 @@ public:
   TProfile3D* photonjet_balance3Dabseta;
   TProfile3D* photonjet_balance3Dabsetawide;
   TProfile3D* photonjet_balance3Dabsetanarrow;
+    TProfile3D* photonjet_balance3D_jetpt;
+    TProfile3D* photonjet_balance3Dwide_jetpt;
+    TProfile3D* photonjet_balance3Dnarrow_jetpt;
+    TProfile3D* photonjet_balance3Dabseta_jetpt;
+    TProfile3D* photonjet_balance3Dabsetawide_jetpt;
+    TProfile3D* photonjet_balance3Dabsetanarrow_jetpt;
   TH3D* photonjet_balance3D_counts;
   TH3D* photonjet_balance3Dwide_counts;
   TH3D* photonjet_balance3Dnarrow_counts;
   TH3D* photonjet_balance3Dabseta_counts;
   TH3D* photonjet_balance3Dabsetawide_counts;
   TH3D* photonjet_balance3Dabsetanarrow_counts;
+    TH3D* photonjet_balance_dist;
 
   // Photon trigger histograms
   TH1D* HLTPhoton30;
@@ -275,6 +316,14 @@ public:
   TH3D* absasymmdist3D_a40;
   TH3D* asymmdist3D_a45;
   TH3D* absasymmdist3D_a45;
+    TH3D* absasymmdist3D_gen_a10;
+    TH3D* absasymmdist3D_gen_a15;
+    TH3D* absasymmdist3D_gen_a20;
+    TH3D* absasymmdist3D_gen_a25;
+    TH3D* absasymmdist3D_gen_a30;
+    TH3D* absasymmdist3D_gen_a35;
+    TH3D* absasymmdist3D_gen_a40;
+    TH3D* absasymmdist3D_gen_a45;
   
 // PF composition?
   

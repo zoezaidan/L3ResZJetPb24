@@ -21,9 +21,9 @@ float jersfuncscale = 0.03; // Scale pp uncertainty up/down in a similar manner
 string jecuncertFile = "jecfiles/";
 
 // Jet veto map
-TString vetomapFile = "jecfiles/";
+TString vetomapFile = "jecfiles/Summer24Prompt24_RunBCDEFGHI.root";
 
-int MAXJETS = 50;
+constexpr int MAXJETS = 50;
 
 float akradius = 0.4;
 Float_t jtptmin = 15.;

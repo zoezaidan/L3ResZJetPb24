@@ -181,15 +181,26 @@ void normalizeHistogramByReferenceBin(TH1D *hist, int referenceBin) {
 void deriveL3_from_photonjet(
     TString mcFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONMC_AK4_photonjet.root",
     TString dataFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONHP_AK4_photonjet.root",
-    TString mode = "zjet", // Options: "photonjet" or "zjet"
-    int alphabin = 5,
+    TString outfilename = "L3Residual.root",
+    int refAlphaBin = 5,
     bool useabs = true,
-    bool usewideabs = false) {
+    bool usewideabs = false,
+    AnalysisType analysisType = AnalysisType::ZJET) {
 
-  TString histPrefix = mode;
-  TString refName = (mode == "zjet") ? "Z" : "Photon";
-  TString refPtLabel = (mode == "zjet") ? "p_{T}^{Z}" : "p_{T}^{#gamma}";
-  TString obj = (mode == "zjet") ? "z" : "photon";
+  if (analysisType != AnalysisType::PHOTONJET &&
+      !isZJetAnalysisType(analysisType)) {
+    cout << "ERROR: Unsupported AnalysisType for L3 derivation: "
+         << analysisTypeName(analysisType) << endl;
+    return;
+  }
+
+  TString histPrefix =
+      (analysisType == AnalysisType::PHOTONJET) ? "photonjet" : "zjet";
+  TString refName =
+      (analysisType == AnalysisType::PHOTONJET) ? "Photon" : "Z";
+  TString refPtLabel =
+      (analysisType == AnalysisType::PHOTONJET) ? "p_{T}^{#gamma}" : "p_{T}^{Z}";
+  TString obj = (analysisType == AnalysisType::PHOTONJET) ? "photon" : "z";
 
   // Wide-|eta| histogram should take precedence over fine |eta| binning
   // (otherwise the wide histogram branch is never reached).
@@ -334,11 +345,12 @@ void deriveL3_from_photonjet(
     return;
   }
 
-  if (!mc3dJetPt[etabins[i].c_str()] || !data3dJetPt[etabins[i].c_str()]) {
-    cout << "ERROR: Missing required direct jet-pT " << refName << " balance profiles "
-            "in the input files."
+  const bool hasJetPtProfiles =
+      (mc3dJetPt[etabins[i].c_str()] && data3dJetPt[etabins[i].c_str()]);
+  if (!hasJetPtProfiles) {
+    cout << "INFO: Optional direct jet-pT " << refName
+         << " balance profiles are missing; skipping jet-pT diagnostic outputs."
          << endl;
-    return;
   }
 
   cout << etabins[i]
@@ -616,93 +628,95 @@ void deriveL3_from_photonjet(
   ///////////////// Balance vs Leading Jet pT (derived from balance = jet_pT/ref_pT)
   ///////////////// for cumulative alpha cuts
 
-  cout << "\n===== Balance vs Leading Jet pT for cumulative alpha cuts ====="
-       << endl;
+  if (hasJetPtProfiles) {
+    cout << "\n===== Balance vs Leading Jet pT for cumulative alpha cuts ====="
+         << endl;
 
-  TProfile3D *jetpt_mc3d = mc3dJetPt[etabins[i].c_str()];
-  TProfile3D *jetpt_data3d = data3dJetPt[etabins[i].c_str()];
-  TAxis *jetptaxis = jetpt_mc3d->GetXaxis();
-  const int nJetPtBins = jetptaxis->GetNbins();
-  std::vector<double> jetPtBinEdges(nJetPtBins + 1);
-  for (int bin = 1; bin <= nJetPtBins + 1; ++bin) {
-    jetPtBinEdges[bin - 1] = jetptaxis->GetBinLowEdge(bin);
-  }
-  const TString jetPtDescriptor = "Jet pT";
-
-  map<int, TH1D *> balance_vsjetpt_mc;
-  map<int, TH1D *> balance_vsjetpt_data;
-  map<int, TH1D *> ratio_vsjetpt;
-  TH1D *ratio_ref_jetpt = nullptr;
-
-  for (int alphaCutBin = 1; alphaCutBin <= nAlphaBins; ++alphaCutBin) {
-    // Cumulative alpha cut: alpha < upper edge of this bin
-    float alpha_cut =
-        mc3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphaCutBin + 1);
-
-    TH1D *h_mc = new TH1D(
-        Form("balance_vsjetpt_mc_alpha%d", alphaCutBin),
-        Form("MC Balance vs %s (#alpha < %.2f);%s (GeV);Balance",
-             jetPtDescriptor.Data(), alpha_cut, jetPtDescriptor.Data()),
-        nJetPtBins, jetPtBinEdges.data());
-    h_mc->SetLineColor(kBlue);
-    h_mc->SetMarkerColor(kBlue);
-
-    TH1D *h_data = new TH1D(
-        Form("balance_vsjetpt_data_alpha%d", alphaCutBin),
-        Form("Data Balance vs %s (#alpha < %.2f);%s (GeV);Balance",
-             jetPtDescriptor.Data(), alpha_cut, jetPtDescriptor.Data()),
-        nJetPtBins, jetPtBinEdges.data());
-    h_data->SetLineColor(kRed);
-    h_data->SetMarkerColor(kRed);
-
-    for (int ptbin = 1; ptbin <= nJetPtBins; ++ptbin) {
-      const CollapsedProfileStats mcStats =
-          collapseProfileAcrossEta(jetpt_mc3d, ptbin, alphaCutBin);
-      const CollapsedProfileStats dataStats =
-          collapseProfileAcrossEta(jetpt_data3d, ptbin, alphaCutBin);
-
-      if (mcStats.valid) {
-        h_mc->SetBinContent(ptbin, mcStats.mean);
-        h_mc->SetBinError(ptbin, mcStats.error);
-      }
-
-      if (dataStats.valid) {
-        h_data->SetBinContent(ptbin, dataStats.mean);
-        h_data->SetBinError(ptbin, dataStats.error);
-      }
+    TProfile3D *jetpt_mc3d = mc3dJetPt[etabins[i].c_str()];
+    TProfile3D *jetpt_data3d = data3dJetPt[etabins[i].c_str()];
+    TAxis *jetptaxis = jetpt_mc3d->GetXaxis();
+    const int nJetPtBins = jetptaxis->GetNbins();
+    std::vector<double> jetPtBinEdges(nJetPtBins + 1);
+    for (int bin = 1; bin <= nJetPtBins + 1; ++bin) {
+      jetPtBinEdges[bin - 1] = jetptaxis->GetBinLowEdge(bin);
     }
+    const TString jetPtDescriptor = "Jet pT";
 
-    balance_vsjetpt_mc[alphaCutBin] = h_mc;
-    balance_vsjetpt_data[alphaCutBin] = h_data;
+    map<int, TH1D *> balance_vsjetpt_mc;
+    map<int, TH1D *> balance_vsjetpt_data;
+    map<int, TH1D *> ratio_vsjetpt;
+    TH1D *ratio_ref_jetpt = nullptr;
 
-    h_mc->Write();
-    h_data->Write();
-
-    // Compute ratio
-    TH1D *h_ratio =
-        (TH1D *)h_data->Clone(Form("ratio_vsjetpt_alpha%d", alphaCutBin));
-    h_ratio->Divide(h_mc);
-    h_ratio->SetTitle(Form("Balance Ratio (Data/MC) vs %s (#alpha < %.2f)",
-                           jetPtDescriptor.Data(), alpha_cut));
-    h_ratio->SetLineColor(kBlack);
-    h_ratio->SetMarkerColor(kBlack);
-    sanitizeRatioHistogram(h_ratio, h_data, h_mc);
-
-    ratio_vsjetpt[alphaCutBin] = h_ratio;
-    h_ratio->Write();
-    if (alphaCutBin == refAlphaBin) {
-      ratio_ref_jetpt = (TH1D *)h_ratio->Clone("ratio_ref_vsjetpt");
-      ratio_ref_jetpt->Write();
-    }
-  }
-
-  if (ratio_ref_jetpt) {
     for (int alphaCutBin = 1; alphaCutBin <= nAlphaBins; ++alphaCutBin) {
-      TH1D *h_ratio_norm = (TH1D *)ratio_vsjetpt[alphaCutBin]->Clone(
-          Form("ratio_norm_vsjetpt_alpha%d", alphaCutBin));
-      normalizeHistogramByReferenceHistogram(h_ratio_norm, ratio_ref_jetpt,
-                                             alphaCutBin == refAlphaBin);
-      h_ratio_norm->Write();
+      // Cumulative alpha cut: alpha < upper edge of this bin
+      float alpha_cut =
+          mc3d[etabins[i].c_str()]->GetZaxis()->GetBinLowEdge(alphaCutBin + 1);
+
+      TH1D *h_mc = new TH1D(
+          Form("balance_vsjetpt_mc_alpha%d", alphaCutBin),
+          Form("MC Balance vs %s (#alpha < %.2f);%s (GeV);Balance",
+               jetPtDescriptor.Data(), alpha_cut, jetPtDescriptor.Data()),
+          nJetPtBins, jetPtBinEdges.data());
+      h_mc->SetLineColor(kBlue);
+      h_mc->SetMarkerColor(kBlue);
+
+      TH1D *h_data = new TH1D(
+          Form("balance_vsjetpt_data_alpha%d", alphaCutBin),
+          Form("Data Balance vs %s (#alpha < %.2f);%s (GeV);Balance",
+               jetPtDescriptor.Data(), alpha_cut, jetPtDescriptor.Data()),
+          nJetPtBins, jetPtBinEdges.data());
+      h_data->SetLineColor(kRed);
+      h_data->SetMarkerColor(kRed);
+
+      for (int ptbin = 1; ptbin <= nJetPtBins; ++ptbin) {
+        const CollapsedProfileStats mcStats =
+            collapseProfileAcrossEta(jetpt_mc3d, ptbin, alphaCutBin);
+        const CollapsedProfileStats dataStats =
+            collapseProfileAcrossEta(jetpt_data3d, ptbin, alphaCutBin);
+
+        if (mcStats.valid) {
+          h_mc->SetBinContent(ptbin, mcStats.mean);
+          h_mc->SetBinError(ptbin, mcStats.error);
+        }
+
+        if (dataStats.valid) {
+          h_data->SetBinContent(ptbin, dataStats.mean);
+          h_data->SetBinError(ptbin, dataStats.error);
+        }
+      }
+
+      balance_vsjetpt_mc[alphaCutBin] = h_mc;
+      balance_vsjetpt_data[alphaCutBin] = h_data;
+
+      h_mc->Write();
+      h_data->Write();
+
+      // Compute ratio
+      TH1D *h_ratio =
+          (TH1D *)h_data->Clone(Form("ratio_vsjetpt_alpha%d", alphaCutBin));
+      h_ratio->Divide(h_mc);
+      h_ratio->SetTitle(Form("Balance Ratio (Data/MC) vs %s (#alpha < %.2f)",
+                             jetPtDescriptor.Data(), alpha_cut));
+      h_ratio->SetLineColor(kBlack);
+      h_ratio->SetMarkerColor(kBlack);
+      sanitizeRatioHistogram(h_ratio, h_data, h_mc);
+
+      ratio_vsjetpt[alphaCutBin] = h_ratio;
+      h_ratio->Write();
+      if (alphaCutBin == refAlphaBin) {
+        ratio_ref_jetpt = (TH1D *)h_ratio->Clone("ratio_ref_vsjetpt");
+        ratio_ref_jetpt->Write();
+      }
+    }
+
+    if (ratio_ref_jetpt) {
+      for (int alphaCutBin = 1; alphaCutBin <= nAlphaBins; ++alphaCutBin) {
+        TH1D *h_ratio_norm = (TH1D *)ratio_vsjetpt[alphaCutBin]->Clone(
+            Form("ratio_norm_vsjetpt_alpha%d", alphaCutBin));
+        normalizeHistogramByReferenceHistogram(h_ratio_norm, ratio_ref_jetpt,
+                                               alphaCutBin == refAlphaBin);
+        h_ratio_norm->Write();
+      }
     }
   }
 
@@ -781,8 +795,10 @@ void deriveL3_from_photonjet(
   // Save original 3D histograms for reference
   mc3d[etabins[i].c_str()]->Write("balance3D_mc");
   data3d[etabins[i].c_str()]->Write("balance3D_data");
-  mc3dJetPt[etabins[i].c_str()]->Write("balance3D_jetpt_mc");
-  data3dJetPt[etabins[i].c_str()]->Write("balance3D_jetpt_data");
+  if (hasJetPtProfiles) {
+    mc3dJetPt[etabins[i].c_str()]->Write("balance3D_jetpt_mc");
+    data3dJetPt[etabins[i].c_str()]->Write("balance3D_jetpt_data");
+  }
 
   // Save counts histograms if available
   if (counts_mc3d[etabins[i].c_str()])

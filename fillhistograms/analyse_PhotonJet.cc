@@ -8,6 +8,7 @@ using std::endl;
 #include "TRandom.h"
 #include "TTree.h"
 #include "TTreeCache.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -31,10 +32,6 @@ using std::endl;
 
 R__LOAD_LIBRARY(histograms_C.so)
 R__LOAD_LIBRARY(eventhistograms_C.so)
-
-std::mt19937 _mersennetwister;
-std::uint32_t _seed = 4;
-//_seed = 4;
 
 bool debug = false;
 bool applyjetvetomap = true;
@@ -73,6 +70,34 @@ float GetPthatBin(float pthat, const std::vector<float> &bins) {
   return result;
 }
 
+// Helper function to extract jet radius from tree path
+// Examples: "ak4PFJetAnalyzer/t" -> 0.4, "ak2PFJetAnalyzer/t" -> 0.2
+float ExtractJetRadius(const std::string &jetPath) {
+  size_t pos = jetPath.find("ak");
+  if (pos == std::string::npos) {
+    log(LOG_WARNING,
+        "Could not extract jet radius from path " + jetPath +
+            "; using default radius = 0.4");
+    return 0.4;
+  }
+
+  pos += 2;
+  while (pos < jetPath.size() && !std::isdigit(jetPath[pos]))
+    pos++;
+
+  if (pos >= jetPath.size() || !std::isdigit(jetPath[pos])) {
+    log(LOG_WARNING,
+        "Invalid jet radius in path " + jetPath +
+            "; using default radius = 0.4");
+    return 0.4;
+  }
+
+  float radius = (jetPath[pos] - '0') / 10.0;
+  log(LOG_INFO, "Detected jet radius R = " + std::to_string(radius) +
+                    " from path " + jetPath);
+  return radius;
+}
+
 // Photon+Jet analysis for L3 residual corrections
 // jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t" or
 // "ak4PFJetAnalyzerSDZcut1/t"
@@ -82,7 +107,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
                        string inputType = "era", int maxFiles = -1,
                        int maxEvents = -1, string outputDir = "",
                        int batchIndex = -1, int totalBatches = 1,
-                       string jetPath = "ak4PFJetAnalyzer/t") {
+                       string jetPath = "ak4PFJetAnalyzer/t",
+                       float jtptlimitforalpha = 15) {
 
   if (debug && g_verbosity < LOG_TRACE) {
     g_verbosity = LOG_TRACE;
@@ -93,6 +119,9 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   bool checkvalidjet =
       false; // this is for checking valid jet range after applying l2. now for
              // tightly limited range. TODO: do something smarter
+
+  float jetRadius = ExtractJetRadius(jetPath);
+  float photonJetDeltaR = jetRadius;
 
   // Build input configuration
   InputConfig config;
@@ -461,18 +490,37 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
   // JER not needed for photon+jet L3 residual analysis
 
-  // Jet veto map
-  auto mapfile =
-      new TFile("jecfiles/Summer24Prompt24_RunBCDEFGHI.root", "READ");
-  auto vetomap = (TH2D *)mapfile->Get("jetvetomap_all");
-
-  // Null check for veto map
-  if (applyjetvetomap && (!mapfile || mapfile->IsZombie() || !vetomap)) {
-    log(LOG_WARNING, "Veto map unavailable, disabling veto map selection");
-    applyjetvetomap = false;
-  } else if (applyjetvetomap) {
-    log(LOG_DEBUG, "Loaded jet veto map successfully");
+    // Jet veto map
+  TFile *mapfile = nullptr;
+  TH2D *vetomap = nullptr;
+  if (applyjetvetomap) {
+    mapfile = TFile::Open(vetomapFile, "READ");
+    if (!mapfile || mapfile->IsZombie()) {
+      log(LOG_WARNING, "Veto map unavailable from " + std::string(vetomapFile) +
+                           ", disabling veto map selection");
+      if (mapfile) {
+        mapfile->Close();
+        delete mapfile;
+        mapfile = nullptr;
+      }
+      applyjetvetomap = false;
+    } else {
+      vetomap = dynamic_cast<TH2D *>(mapfile->Get("jetvetomap_all"));
+      if (!vetomap) {
+        log(LOG_WARNING, "Histogram jetvetomap_all not found in " +
+                             std::string(vetomapFile) +
+                             ", disabling veto map selection");
+        mapfile->Close();
+        delete mapfile;
+        mapfile = nullptr;
+        applyjetvetomap = false;
+      } else {
+        log(LOG_DEBUG,
+            "Loaded jet veto map from " + std::string(vetomapFile));
+      }
+    }
   }
+
 
   log(LOG_INFO, "Number of entries: " + std::to_string(chains->nEntries));
   Long64_t nentries = chains->nEntries;
@@ -483,6 +531,17 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     nentries = 1000;
 
   log(LOG_INFO, "Processing " + std::to_string(nentries) + " events");
+
+  Long64_t nEventsBasicPreselection = 0;
+  Long64_t nEventsWithPhotonCandidate = 0;
+  Long64_t nEventsPassedPhotonID = 0;
+  Long64_t nEventsWithAwayJet = 0;
+  Long64_t nEventsPassedVeto = 0;
+  Long64_t nEventsPassedSelection = 0;
+  Long64_t nEventsWithGenPhoton = 0;
+  Long64_t nEventsPassedWithGenPhoton = 0;
+  Long64_t i_processed = 0;
+
   for (Long64_t i = 0; i < nentries; ++i) {
     log(LOG_TRACE, "Event " + std::to_string(i + 1) + "/" +
                        std::to_string(nentries) + ": reading event tree");
@@ -497,6 +556,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
     photonTree->GetEntry(i);
     log_progress_every(i + 1, nentries, 1000, LOG_INFO);
+    i_processed++;
 
     // Photon trigger logic
     if (!isMC) {
@@ -549,6 +609,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     if (jtpt[0] < jtptmin) {
       continue;
     }
+    nEventsBasicPreselection++;
     log(LOG_TRACE, "Event " + std::to_string(i + 1) +
                        ": passed basic photon and jet multiplicity selection");
 
@@ -708,6 +769,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     // Stop early if no photon passes the kinematic preselection
     if (leadPhotonIdx < 0)
       continue;
+    nEventsWithPhotonCandidate++;
 
     // Photon ID cuts
     if ((*phoHoverE)[leadPhotonIdx] > 0.129991)
@@ -721,6 +783,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
       continue;
     if ((*pfpIso3subUEec)[leadPhotonIdx] > 2.0)
       continue;
+    nEventsPassedPhotonID++;
     log(LOG_TRACE,
         "Event " + std::to_string(i + 1) + ": passed photon ID cuts");
 
@@ -729,6 +792,7 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     // apply a small dR requirement
     int awayJetIndices[MAXJETS];
     int nAwayJets = 0;
+    const float alphaJetPtFloor = std::min(jtptmin, jtptlimitforalpha);
 
     for (int j = 0; j < nref; j++) {
       // Apply jet ID
@@ -736,8 +800,8 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         continue;
 
       // Jet kinematic cuts
-      if (jtpt[j] < 40.0)
-        continue; // Minimum jet pT
+      if (jtpt[j] < alphaJetPtFloor)
+        continue;
 
       // Calculate delta-phi with photon
       float dphi = abs(jtphi[j] - (*phoPhi)[leadPhotonIdx]);
@@ -745,14 +809,14 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         dphi = 2 * TMath::Pi() - dphi;
 
       // Back-to-back requirement
-      if (dphi < 2.7488935)
+      if (dphi < 2/7)
         continue; // 2*pi/3 = 2.0943951
 
       // Calculate delta-R (reject jets close to photon)
       float deta = jteta[j] - (*phoEta)[leadPhotonIdx];
       float deltaR = sqrt(deta * deta + dphi * dphi);
-      if (deltaR < 0.4)
-        continue; // Isolation cone
+      if (deltaR < photonJetDeltaR)
+        continue;
 
       // This jet is away-side
       awayJetIndices[nAwayJets] = j;
@@ -760,10 +824,6 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     }
     log(LOG_TRACE, "Event " + std::to_string(i + 1) + ": identified " +
                        std::to_string(nAwayJets) + " away-side jets");
-
-    // Need at least one away-side jet
-    if (nAwayJets < 1)
-      continue;
 
     // Sort away-side jets by pT (descending)
     for (int i = 0; i < nAwayJets - 1; i++) {
@@ -776,6 +836,14 @@ void analyse_PhotonJet(string input = "PHOTONHP",
       }
     }
 
+    // Need at least one away-side jet, and the leading away-side jet is still
+    // required to satisfy the nominal jet threshold.
+    if (nAwayJets < 1)
+      continue;
+    if (jtpt[awayJetIndices[0]] < jtptmin)
+      continue;
+    nEventsWithAwayJet++;
+
     // Leading away-side jet (probe jet)
     int awayJetIdx = awayJetIndices[0];
 
@@ -783,8 +851,10 @@ void analyse_PhotonJet(string input = "PHOTONHP",
     alpha = 0;
     if (nAwayJets >= 2) {
       int secondAwayJetIdx = awayJetIndices[1];
-      float ptavg_temp = (*phoEt)[leadPhotonIdx];
-      alpha = jtpt[secondAwayJetIdx] / ptavg_temp;
+      if (jtpt[secondAwayJetIdx] >= jtptlimitforalpha) {
+        float ptavg_temp = (*phoEt)[leadPhotonIdx];
+        alpha = jtpt[secondAwayJetIdx] / ptavg_temp;
+      }
     } else {
       alpha = 0; // Only one away-side jet
     }
@@ -807,6 +877,9 @@ void analyse_PhotonJet(string input = "PHOTONHP",
         genPhotonPhi = (*mcPhi)[leadPhotonGenIdx];
         hasGenPhoton = true;
       }
+    }
+    if (isMC && hasGenPhoton) {
+      nEventsWithGenPhoton++;
     }
 
     jet_pt = jtpt[awayJetIdx];
@@ -850,6 +923,11 @@ void analyse_PhotonJet(string input = "PHOTONHP",
 
       if (!passVetoMap)
         continue;
+    }
+    nEventsPassedVeto++;
+    nEventsPassedSelection++;
+    if (isMC && hasGenPhoton) {
+      nEventsPassedWithGenPhoton++;
     }
     log(LOG_TRACE,
         "Event " + std::to_string(i + 1) + ": passed veto map selection");
@@ -1095,6 +1173,46 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   } // end of event loop
   log(LOG_INFO, "Finished processing all events");
 
+  log(LOG_INFO, "========================================");
+  log(LOG_INFO, "Photon+Jet Analysis Summary");
+  log(LOG_INFO, "========================================");
+  log(LOG_INFO, "Total events processed: " + std::to_string(i_processed));
+  log(LOG_INFO, "Basic photon+jet preselection: " +
+                    std::to_string(nEventsBasicPreselection));
+
+  if (nEventsBasicPreselection > 0) {
+    log(LOG_INFO, "  + leading photon candidate: " +
+                      std::to_string(nEventsWithPhotonCandidate) + " (" +
+                      std::to_string(100.0 * nEventsWithPhotonCandidate /
+                                     nEventsBasicPreselection) +
+                      "%)");
+    log(LOG_INFO, "  + passes photon ID:       " +
+                      std::to_string(nEventsPassedPhotonID) + " (" +
+                      std::to_string(100.0 * nEventsPassedPhotonID /
+                                     nEventsBasicPreselection) +
+                      "%)");
+    log(LOG_INFO, "  + has away-side jet:      " +
+                      std::to_string(nEventsWithAwayJet) + " (" +
+                      std::to_string(100.0 * nEventsWithAwayJet /
+                                     nEventsBasicPreselection) +
+                      "%)");
+    log(LOG_INFO, "  + passes veto map:        " +
+                      std::to_string(nEventsPassedSelection) + " (" +
+                      std::to_string(100.0 * nEventsPassedSelection /
+                                     nEventsBasicPreselection) +
+                      "%)");
+  }
+
+  if (isMC && nEventsPassedPhotonID > 0) {
+    log(LOG_INFO, "Gen-matched selected photons: " +
+                      std::to_string(nEventsWithGenPhoton));
+    log(LOG_INFO, "Passed with gen photon:       " +
+                      std::to_string(nEventsPassedWithGenPhoton));
+  }
+
+  log(LOG_INFO, "FINAL: " + std::to_string(nEventsPassedSelection) +
+                    " events passed all selections");
+
   // Write output histograms
   log(LOG_INFO, "Writing output histograms");
 
@@ -1109,6 +1227,12 @@ void analyse_PhotonJet(string input = "PHOTONHP",
   // Write and close output file
   outfile->Write();
   log(LOG_INFO, "Wrote " + outputfilename);
+
+  if (mapfile) {
+    mapfile->Close();
+    delete mapfile;
+    mapfile = nullptr;
+  }
 
   // Close file properly - TFile destructor handles all owned histogram cleanup
   outfile->Close();

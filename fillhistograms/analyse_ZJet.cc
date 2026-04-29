@@ -7,17 +7,22 @@ using std::endl;
 #include "TMath.h"
 #include "TRandom.h"
 #include "TTree.h"
+#include "TTreeCache.h"
 #include "TLorentzVector.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <iomanip>
 #include <iterator>
+#include <sstream>
 #include <typeinfo>
 
 #include "configurations.h"
 #include "histograms.h"
 #include "settings.h"
 
+#include "JetCorrector.h"
 #include "eventhistograms.h"
 #include "helpers.h"
 #include "input_config.h"
@@ -26,20 +31,25 @@ using std::endl;
 R__LOAD_LIBRARY(histograms_C.so)
 R__LOAD_LIBRARY(eventhistograms_C.so)
 
-#include "JetMETCorrections/Modules/interface/JetResolution.h"
-JME::JetResolution *_jer(0);
-JME::JetResolutionScaleFactor *_jer_sf(0);
 float rho = 0.;
-
-std::mt19937 _mersennetwister;
-std::uint32_t _seed = 4;
-
-#if REDOJES == 1
-#include "CondFormats/JetMETObjects/interface/JetCorrectorParameters.h"
-#endif
 
 bool debug = false;
 bool applyjetvetomap = true;
+
+namespace {
+
+std::string formatPercent(double numerator, double denominator) {
+  if (!(denominator > 0.0)) {
+    return "n/a";
+  }
+
+  std::ostringstream stream;
+  stream << std::fixed << std::setprecision(2)
+         << 100.0 * numerator / denominator << "%";
+  return stream.str();
+}
+
+} // namespace
 
 // Z candidate structure
 struct ZCandidate {
@@ -327,8 +337,8 @@ float ExtractJetRadius(const std::string& jetPath) {
     // Handles: ak4, akCs4, akPu4, etc.
     size_t pos = jetPath.find("ak");
     if (pos == std::string::npos) {
-        cout << "WARNING: Could not extract jet radius from path: " << jetPath << endl;
-        cout << "         Using default radius = 0.4" << endl;
+    log(LOG_WARNING, "Could not extract jet radius from path " + jetPath +
+               "; using default radius = 0.4");
         return 0.4;
     }
 
@@ -341,21 +351,22 @@ float ExtractJetRadius(const std::string& jetPath) {
     }
 
     if (pos >= jetPath.size() || !isdigit(jetPath[pos])) {
-        cout << "WARNING: Invalid jet radius in path: " << jetPath << endl;
-        cout << "         Using default radius = 0.4" << endl;
+      log(LOG_WARNING, "Invalid jet radius in path " + jetPath +
+                 "; using default radius = 0.4");
         return 0.4;
     }
 
     int radiusTimes10 = jetPath[pos] - '0';  // Convert char to int
     float radius = radiusTimes10 / 10.0;
 
-    cout << "Detected jet radius: R = " << radius << " from path: " << jetPath << endl;
+    log(LOG_INFO, "Detected jet radius R = " + std::to_string(radius) +
+              " from path " + jetPath);
     return radius;
 }
 
 // Z+Jet analysis for L3 residual corrections
 // jetTree: jet tree path, e.g. "ak4PFJetAnalyzer/t"
-// channel: "muon", "electron", or "both"
+// analysisType: ZJET_MUMU, ZJET_EE, or ZJET (combined)
 void analyse_ZJet(string input = "ZJETHP",
                   string outputfiletag = "AK4_zjet",
                   bool isMC = false, bool checkjetid = false,
@@ -363,20 +374,30 @@ void analyse_ZJet(string input = "ZJETHP",
                   int maxEvents = -1, string outputDir = "",
                   int batchIndex = -1, int totalBatches = 1,
                   string jetPath = "ak4PFJetAnalyzer/t",
-                  string channel = "muon") {  // "muon", "electron", or "both"
+                  AnalysisType analysisType = AnalysisType::ZJET_MUMU,
+                  float jtptlimitforalpha = 15) {
 
   bool usecalotrig = false;
   bool checkvalidjet = false; // this is for checking valid jet range after applying l2. now for
                               // tightly limited range. TODO: do something smarter
 
-  // Validate channel option
-  if (channel != "muon" && channel != "electron" && channel != "both") {
-    cerr << "ERROR: Invalid channel option: " << channel << endl;
-    cerr << "Valid options: 'muon', 'electron', 'both'" << endl;
+  if (debug && g_verbosity < LOG_TRACE) {
+    g_verbosity = LOG_TRACE;
+  }
+  
+  if (!isZJetAnalysisType(analysisType)) {
+      log(LOG_ERROR, "Invalid AnalysisType for analyse_ZJet: " +
+             std::string(analysisTypeName(analysisType)));
+      log(LOG_ERROR,
+       "Valid options: AnalysisType::ZJET_MUMU, AnalysisType::ZJET_EE, AnalysisType::ZJET");
     return;
   }
 
-  cout << "Running Z+jet analysis with channel: " << channel << endl;
+  const bool useMuonFlavor = usesMuonZJetFlavor(analysisType);
+  const bool useElectronFlavor = usesElectronZJetFlavor(analysisType);
+
+  log(LOG_INFO, "Running Z+jet analysis with AnalysisType: " +
+                    std::string(analysisTypeName(analysisType)));
 
   // Extract jet radius from tree path
   float jetRadius = ExtractJetRadius(jetPath);
@@ -394,7 +415,7 @@ void analyse_ZJet(string input = "ZJETHP",
 
   // Set default output directory
   if (outputDir.empty()) {
-    config.outputDir = "../L3Residual";
+    config.outputDir = "../output";
   } else {
     config.outputDir = outputDir;
   }
@@ -406,7 +427,7 @@ void analyse_ZJet(string input = "ZJETHP",
       config.type = InputType::FILE;
       config.path = it->second;
     } else {
-      cerr << "ERROR: Unknown era: " << input << endl;
+      log(LOG_ERROR, "Unknown era: " + input);
       return;
     }
   } else if (inputType == "directory") {
@@ -460,7 +481,7 @@ void analyse_ZJet(string input = "ZJETHP",
   if (debug)
     outputfilename = "test.root";
 
-  cout << "Output file: " << outputfilename << endl;
+  log(LOG_INFO, "Output file: " + outputfilename);
 
   // Define tree paths
   std::string evtPath = "hiEvtAnalyzer/HiTree";
@@ -469,16 +490,15 @@ void analyse_ZJet(string input = "ZJETHP",
   std::string electronPath = "ggHiNtuplizer/EventTree";
   std::string muonPath = "muonAnalyzer/MuonTree";
 
-  cout << "Using jet tree: " << jetPath << endl;
-  cout << "Building input chains..." << endl;
+  log(LOG_INFO, "Using jet tree: " + jetPath);
+  log(LOG_INFO, "Building input chains...");
 
-  // Determine which lepton trees we need based on channel
-  bool needElectronTree = (channel == "electron" || channel == "both" || isMC);
-  bool needMuonTree = (channel == "muon" || channel == "both");
+  bool needElectronTree = (useElectronFlavor || isMC);
+  bool needMuonTree = useMuonFlavor;
 
   TreeChains *chains = BuildChainsFromConfig(config, jetPath, needElectronTree, needMuonTree);
   if (!chains || chains->nEntries == 0) {
-    cerr << "ERROR: No entries found in input!" << endl;
+    log(LOG_ERROR, "No entries found in input");
     return;
   }
 
@@ -491,7 +511,7 @@ void analyse_ZJet(string input = "ZJETHP",
 
   // Cuts and weights from event tree
   Int_t hiBin = -1;
-  Float_t weight = 1, vz = 0, pthat = 0, evtwt = 1;
+  Float_t weight = 1, vz = 0, evtwt = 1;
 
   // Muon variables (vectors)
   Int_t nReco = 0;
@@ -546,7 +566,6 @@ void analyse_ZJet(string input = "ZJETHP",
   evtTree->SetBranchAddress("vz", &vz);
   if (isMC) {
     evtTree->SetBranchAddress("weight", &weight);
-    evtTree->SetBranchAddress("pthat", &pthat);
   }
 
   //// EVENT FILTERS
@@ -566,14 +585,14 @@ void analyse_ZJet(string input = "ZJETHP",
 
   if (!isMC) {
     triggerTree->SetBranchStatus("*", 0);
-    if (channel == "muon" || channel == "both") {
-      triggerTree->SetBranchStatus("HLT_PPRefL2SingleMu7_v*", 1);
-      triggerTree->SetBranchAddress("HLT_PPRefL2SingleMu7_v*", &HLT_SingleMu);
+    if (useMuonFlavor) {
+      triggerTree->SetBranchStatus("HLT_PPRefL2SingleMu7_v1", 1);
+      triggerTree->SetBranchAddress("HLT_PPRefL2SingleMu7_v1", &HLT_SingleMu); // SetBranchAddress does not take wildcards, so we need to specify the exact trigger name.
     }
-    if (channel == "electron" || channel == "both") {
+    if (useElectronFlavor) {
       // TODO: Update trigger name based on actual trigger in forest
-      cout << "WARNING: Using placeholder dielectron trigger name - UPDATE THIS!" << endl;
-      cout << "Check available triggers with: electronTree->GetListOfBranches()->Print()" << endl;
+      log(LOG_WARNING,
+          "Using placeholder dielectron trigger name - update this after checking the forest branches");
       // triggerTree->SetBranchStatus("HLT_SingleEle*", 1);
       // triggerTree->SetBranchAddress("HLT_SingleEle*", &HLT_SingleEle);
     }
@@ -581,6 +600,7 @@ void analyse_ZJet(string input = "ZJETHP",
 
   // JETS
   // Disable all branches first, then enable only what we need
+  jetTree->SetMakeClass(1); // Debug why this is necessary
   jetTree->SetBranchStatus("*", 0);
 
   Int_t evt;
@@ -605,24 +625,18 @@ void analyse_ZJet(string input = "ZJETHP",
 
   //Int_t jtn[MAXJETS];
 
-  jetTree->SetBranchAddress("evt", &evt);
-  jetTree->SetBranchAddress("nref", &nref);
-  jetTree->SetBranchAddress("rawpt", &jtpt); // we want uncorrected rawpt, jtpt might have some JEC already applied
-  jetTree->SetBranchAddress("jteta", &jteta);
-  jetTree->SetBranchAddress("jtphi", &jtphi);
-
-  jetTree->SetBranchStatus("evt", 1);
   jetTree->SetBranchStatus("nref", 1);
+  jetTree->SetBranchStatus("evt", 1);
   jetTree->SetBranchStatus("rawpt", 1);
   jetTree->SetBranchStatus("jteta", 1);
   jetTree->SetBranchStatus("jtphi", 1);
 
-  jetTree->SetBranchAddress("jtPfNHF", &jtnhf);
-  jetTree->SetBranchAddress("jtPfCHF", &jtchf);
-  jetTree->SetBranchAddress("jtPfNEF", &jtnef);
-  jetTree->SetBranchAddress("jtPfCEF", &jtcef);
-  jetTree->SetBranchAddress("jtPfMUF", &jtmuf);
-  jetTree->SetBranchAddress("jtPfCHM", &jtchm);
+  jetTree->SetBranchAddress("evt", &evt);
+  jetTree->SetBranchAddress("nref", &nref);
+  jetTree->SetBranchAddress("rawpt", jtpt); // we want uncorrected rawpt, jtpt might have some JEC already applied
+  jetTree->SetBranchAddress("jteta", jteta);
+  jetTree->SetBranchAddress("jtphi", jtphi);
+
   jetTree->SetBranchStatus("jtPfNHF", 1);
   jetTree->SetBranchStatus("jtPfCHF", 1);
   jetTree->SetBranchStatus("jtPfNEF", 1);
@@ -630,15 +644,22 @@ void analyse_ZJet(string input = "ZJETHP",
   jetTree->SetBranchStatus("jtPfMUF", 1);
   jetTree->SetBranchStatus("jtPfCHM", 1);
 
-  jetTree->SetBranchAddress("jtPfNHM", &jtPfNHM);
-  jetTree->SetBranchAddress("jtPfCEM", &jtPfCEM);
-  jetTree->SetBranchAddress("jtPfNEM", &jtPfNEM);
-  jetTree->SetBranchAddress("jtPfMUM", &jtPfMUM);
-  
+  jetTree->SetBranchAddress("jtPfNHF", jtnhf);
+  jetTree->SetBranchAddress("jtPfCHF", jtchf);
+  jetTree->SetBranchAddress("jtPfNEF", jtnef);
+  jetTree->SetBranchAddress("jtPfCEF", jtcef);
+  jetTree->SetBranchAddress("jtPfMUF", jtmuf);
+  jetTree->SetBranchAddress("jtPfCHM", jtchm);
+
   jetTree->SetBranchStatus("jtPfNHM", 1);
   jetTree->SetBranchStatus("jtPfCEM", 1);
   jetTree->SetBranchStatus("jtPfNEM", 1);
   jetTree->SetBranchStatus("jtPfMUM", 1);
+
+  jetTree->SetBranchAddress("jtPfNHM", jtPfNHM);
+  jetTree->SetBranchAddress("jtPfCEM", jtPfCEM);
+  jetTree->SetBranchAddress("jtPfNEM", jtPfNEM);
+  jetTree->SetBranchAddress("jtPfMUM", jtPfMUM);
 
   // Gen level jet information
   Float_t jtpt_gen[MAXJETS];
@@ -647,18 +668,19 @@ void analyse_ZJet(string input = "ZJETHP",
   Float_t refdrjt[MAXJETS];
 
   if (isMC) {
-    jetTree->SetBranchAddress("refpt", &jtpt_gen);
-    jetTree->SetBranchAddress("refeta", &jteta_gen);
-    jetTree->SetBranchAddress("refphi", &jtphi_gen);
-    jetTree->SetBranchAddress("refdrjt", &refdrjt);
     jetTree->SetBranchStatus("refpt", 1);
     jetTree->SetBranchStatus("refeta", 1);
     jetTree->SetBranchStatus("refphi", 1);
     jetTree->SetBranchStatus("refdrjt", 1);
+
+    jetTree->SetBranchAddress("refpt", jtpt_gen);
+    jetTree->SetBranchAddress("refeta", jteta_gen);
+    jetTree->SetBranchAddress("refphi", jtphi_gen);
+    jetTree->SetBranchAddress("refdrjt", refdrjt);
   }
 
   // Set muon branch addresses (from muonAnalyzer/MuonTree)
-  if (channel == "muon" || channel == "both") {
+  if (useMuonFlavor) {
     muonTree->SetBranchStatus("*", 0);
     muonTree->SetBranchStatus("nReco", 1);
     muonTree->SetBranchStatus("recoPt", 1);
@@ -704,7 +726,7 @@ void analyse_ZJet(string input = "ZJETHP",
   }
 
   // Set electron branch addresses (from ggHiNtuplizer/EventTree)
-  if (channel == "electron" || channel == "both") {
+  if (useElectronFlavor) {
     electronTree->SetBranchStatus("*", 0);
     electronTree->SetBranchStatus("nEle", 1);
     electronTree->SetBranchStatus("elePt", 1);
@@ -726,8 +748,8 @@ void analyse_ZJet(string input = "ZJETHP",
 
   if (isMC) {
     // MC truth is in electronTree (ggHiNtuplizer/EventTree) - for electrons
-    if (electronTree && (channel == "electron" || channel == "both" || isMC)) {
-      if (channel == "muon") { electronTree->SetBranchStatus("*", 0); }
+    if (electronTree && (useElectronFlavor || isMC)) {
+      if (!useElectronFlavor) { electronTree->SetBranchStatus("*", 0); }
       electronTree->SetBranchStatus("mcPID", 1);
       electronTree->SetBranchStatus("mcStatus", 1);
       electronTree->SetBranchStatus("mcMomPID", 1);
@@ -746,6 +768,15 @@ void analyse_ZJet(string input = "ZJETHP",
       // electronTree->SetBranchAddress("mcMass", &mcMass);
     }
   }
+
+  TTreeCache::SetLearnEntries(10);
+  evtTree->AddBranchToCache("*", true);
+  triggerTree->AddBranchToCache("*", true);
+  if (electronTree)
+    electronTree->AddBranchToCache("*", true);
+  if (muonTree)
+    muonTree->AddBranchToCache("*", true);
+  jetTree->AddBranchToCache("*", true);
 
   TFile *outfile = new TFile(outputfilename.c_str(), "RECREATE");
 
@@ -789,38 +820,52 @@ void analyse_ZJet(string input = "ZJETHP",
   eventhistograms *eh = new eventhistograms(dir, isMC);
 
 #if REDOJES == 1
-  cout << "Applying MC JEC from file " << jecfile.c_str() << endl;
-  FactorizedJetCorrector *corr;
-  vector<JetCorrectorParameters> vpar;
-  vpar.push_back(JetCorrectorParameters(jecfile.c_str()));
-  if (!isMC && !l2file.empty()) {
-    cout << "Applying L2 Residual from file " << l2file.c_str() << endl;
-    vpar.push_back(JetCorrectorParameters(l2file.c_str()));
-  } else if (!isMC) {
-    cout << "\033[1;31m[WARNING]: No L2 Residual file provided. Proceeding with MC-base JEC only.\033[0m" << endl;
+  log(LOG_INFO, "Applying MC JEC from file " + jecfile);
+  vector<string> JECFiles;
+  JECFiles.push_back(jecfile.c_str());
+  if (!isMC) {
+    log(LOG_INFO, "Applying L2 Residual from file " + l2file);
+    JECFiles.push_back(l2file.c_str());
   }
-  corr = new FactorizedJetCorrector(vpar);
+  JetCorrector JEC(JECFiles);
 #endif
 
-  // JER not needed for photon+jet L3 residual analysis
+  // JER to be added for L3 residual analysis
 
   // Jet veto map
-  auto mapfile = new TFile("jecfiles/Summer24Prompt24_RunBCDEFGHI.root","READ"); 
-  auto vetomap = (TH2D*)mapfile->Get("jetvetomap_all");
-  // Null check for veto map
-
-  if (applyjetvetomap && (!mapfile || mapfile->IsZombie() || !vetomap)) {
-    cerr << "WARNING: Veto map unavailable, disabling veto map selection" << endl;
-    applyjetvetomap = false;
+  TFile *mapfile = nullptr;
+  TH2D *vetomap = nullptr;
+  if (applyjetvetomap) {
+    mapfile = TFile::Open(vetomapFile, "READ");
+    if (!mapfile || mapfile->IsZombie()) {
+      log(LOG_WARNING,
+          "Veto map unavailable, disabling veto map selection");
+      if (mapfile) {
+        mapfile->Close();
+        delete mapfile;
+        mapfile = nullptr;
+      }
+      applyjetvetomap = false;
+    } else {
+      vetomap = dynamic_cast<TH2D *>(mapfile->Get("jetvetomap_all"));
+      if (!vetomap) {
+        log(LOG_WARNING,
+            "jetvetomap_all not found in veto map file, disabling veto map selection");
+        mapfile->Close();
+        delete mapfile;
+        mapfile = nullptr;
+        applyjetvetomap = false;
+      }
+    }
   }
 
-  cout << "Number of entries: " << chains->nEntries << endl;
+  log(LOG_INFO, "Number of entries: " + std::to_string(chains->nEntries));
   Long64_t nentries = chains->nEntries;
   if (config.maxEvents > 0 && config.maxEvents < nentries) {
     nentries = config.maxEvents;
   }
 
-  cout << "Processing " << nentries << " events" << endl;
+  log(LOG_INFO, "Processing " + std::to_string(nentries) + " events");
 
   // Counters for monitoring
   Long64_t nEventsWithMuonZ = 0;
@@ -836,28 +881,29 @@ void analyse_ZJet(string input = "ZJETHP",
 
   Long64_t i_processed = 0;
   for (Long64_t i = 0; i < nentries; ++i) {
+    if (debug) {
+      log(LOG_DEBUG, "Event " + std::to_string(i) + ": begin");
+    }
     evtTree->GetEntry(i);
     triggerTree->GetEntry(i);
-    // Get entries from appropriate lepton trees
-    // ONLY read the trees required for the active channel
-    if (muonTree && (channel == "muon" || channel == "both")) { muonTree->GetEntry(i); }
-    // We need electronTree even in muon mode for MC to get the gen info
-    if (electronTree && (channel == "electron" || channel == "both" || isMC)) { electronTree->GetEntry(i); }
-    
-    // Progress monitoring
-    if (i % 10000 == 0) {
-      cout << "Processing event " << i << " / " << nentries << endl;
+    // Get entries from the trees required for the active AnalysisType.
+    if (muonTree && useMuonFlavor) { muonTree->GetEntry(i); }
+    if (electronTree && (useElectronFlavor || isMC)) { electronTree->GetEntry(i); }
+    if (debug) {
+      log(LOG_TRACE, "Event " + std::to_string(i) + ": lepton trees loaded");
     }
+    
+    log_progress_every(i + 1, nentries, 10000, LOG_INFO);
     if (i == 40000000) break;
     i_processed++;
 
     // Trigger logic
     if (!isMC) {
-      if (channel == "muon") {
+      if (analysisType == AnalysisType::ZJET_MUMU) {
         trigger = HLT_SingleMu;
-      } else if (channel == "electron") {
+      } else if (analysisType == AnalysisType::ZJET_EE) {
         trigger = HLT_SingleEle;
-      } else if (channel == "both") {
+      } else if (analysisType == AnalysisType::ZJET) {
         trigger = (HLT_SingleMu || HLT_SingleEle);
       }
       if (!trigger) continue;
@@ -878,32 +924,38 @@ void analyse_ZJet(string input = "ZJETHP",
     //    if (pprimaryVertexFilter != 1) continue;
     //  }
     jetTree->GetEntry(i);
+    if (debug) {
+      log(LOG_TRACE, "Event " + std::to_string(i) + ": jet tree loaded with nref=" +
+                         std::to_string(nref) + ", nReco=" +
+                         std::to_string(nReco) + ", nEle=" +
+                         std::to_string(nEle));
+    }
 
     // Reconstruct Z candidate(s)
     ZCandidate zMuon, zElectron, selectedZ;
     bool hasZMuon = false, hasZElectron = false;
 
-    if (channel == "muon" || channel == "both") {
+    if (useMuonFlavor) {
       zMuon = ReconstructZFromMuons(nReco, recoPt, recoEta, recoPhi, recoCharge, recoIDTight, 
                               recoPFChIso, recoPFPhoIso, recoPFNeuIso, recoPFPUIso);
       hasZMuon = zMuon.isValid;
       if (hasZMuon) nEventsWithMuonZ++;
     }
 
-    if (channel == "electron" || channel == "both") {
+    if (useElectronFlavor) {
       zElectron = ReconstructZFromElectrons(nEle, elePt, eleEta, elePhi, eleCharge, eleCutIdWP80, elePFRelIsoWithEA);
       hasZElectron = zElectron.isValid;
       if (hasZElectron) nEventsWithElectronZ++;
     }
 
     // Select which Z to use
-    if (channel == "muon") {
+    if (analysisType == AnalysisType::ZJET_MUMU) {
       if (!hasZMuon) continue;
       selectedZ = zMuon;
-    } else if (channel == "electron") {
+    } else if (analysisType == AnalysisType::ZJET_EE) {
       if (!hasZElectron) continue;
       selectedZ = zElectron;
-    } else if (channel == "both") {
+    } else if (analysisType == AnalysisType::ZJET) {
       if (!hasZMuon && !hasZElectron) continue;
       if (hasZMuon && !hasZElectron) selectedZ = zMuon;
       else if (!hasZMuon && hasZElectron) selectedZ = zElectron;
@@ -913,6 +965,11 @@ void analyse_ZJet(string input = "ZJETHP",
         float eleDiff = fabs(zElectron.mass - 91.1880);
         selectedZ = (muonDiff < eleDiff) ? zMuon : zElectron;
       }
+    }
+    if (debug) {
+      log(LOG_DEBUG, "Event " + std::to_string(i) + ": reco Z selected pT=" +
+                         std::to_string(selectedZ.pt) + ", mass=" +
+                         std::to_string(selectedZ.mass));
     }
 
     // ========================================
@@ -926,19 +983,23 @@ void analyse_ZJet(string input = "ZJETHP",
     float deltaMass_recoGen = 999;
 
     if (isMC) {
+      if (debug) {
+        log(LOG_TRACE, "Event " + std::to_string(i) + ": entering gen-Z matching");
+      }
       // For BOTH muon and electron channels, the gen info is in the mcPID branches (ggHiNtuplizer)
+      //! TO BE UPDATED with the muonAnalyzer gen branches. 
       if (electronTree) {
         int nMC = mcPID ? mcPID->size() : 0;
         
-        // If channel is muon, we look for PID 13 in the mc branches
-        if (channel == "muon") {
+        if (analysisType == AnalysisType::ZJET_MUMU) {
             // Re-using the electron function logic but looking for muons (PID 13)
             // We'll create a temp function or just modify yours:
             genZ = ReconstructGenZFromElectrons(nMC, mcPID, mcStatus, mcPt, mcEta, mcPhi, mcMomPID);
             
             /* Note: If your ReconstructGenZFromElectrons function is strictly hardcoded 
                to PID 11, you should change that function's loop to:
-               int targetPID = (channel == "muon") ? 13 : 11;
+              int targetPID =
+                 (analysisType == AnalysisType::ZJET_MUMU) ? 13 : 11;
                if (abs((*mcPID)[i]) != targetPID) continue; 
             */
         } else {
@@ -964,6 +1025,11 @@ void analyse_ZJet(string input = "ZJETHP",
         nEventsWithGenZ++;
       }
     }
+    if (debug) {
+      log(LOG_DEBUG, "Event " + std::to_string(i) + ": gen matching done hasGenZ=" +
+                         std::to_string(hasGenZ) + ", deltaR=" +
+                         std::to_string(deltaR_recoGen));
+    }
 
     // Optional: Apply gen-matching requirement for MC validation
     // Uncomment these lines if you want to require gen-matching:
@@ -973,7 +1039,7 @@ void analyse_ZJet(string input = "ZJETHP",
     // Debug output for first few events
     if (debug && isMC && i < 5) {  // Print first 5 MC events
       cout << "\n=== Event " << i << " Gen-Matching Debug ===" << endl;
-      cout << "Channel: " << channel << endl;
+      cout << "AnalysisType: " << analysisTypeName(analysisType) << endl;
       cout << "Reco Z: pT=" << selectedZ.pt << " GeV, eta=" << selectedZ.eta 
            << ", phi=" << selectedZ.phi << ", mass=" << selectedZ.mass << " GeV" << endl;
 
@@ -986,7 +1052,7 @@ void analyse_ZJet(string input = "ZJETHP",
         cout << "Gen Z: NOT FOUND" << endl;
 
         // Debug: show what gen leptons are available
-        if (channel == "muon" && nGen > 0) {
+        if (analysisType == AnalysisType::ZJET_MUMU && nGen > 0) {
           cout << "Gen-level particles in muonTree (nGen=" << nGen << "):" << endl;
           for (int ig = 0; ig < nGen && ig < (int)genPID->size(); ig++) {
             cout << "  [" << ig << "] PID=" << (*genPID)[ig] 
@@ -997,7 +1063,7 @@ void analyse_ZJet(string input = "ZJETHP",
             }
             cout << endl;
           }
-        } else if (channel == "electron" && mcPID && mcPID->size() > 0) {
+        } else if (analysisType == AnalysisType::ZJET_EE && mcPID && mcPID->size() > 0) {
           cout << "Gen-level particles in ggHiNtuplizer (nMC=" << mcPID->size() << "):" << endl;
           for (size_t ig = 0; ig < mcPID->size() && ig < 10; ig++) {
             cout << "  [" << ig << "] PID=" << (*mcPID)[ig]
@@ -1018,10 +1084,11 @@ void analyse_ZJet(string input = "ZJETHP",
     if (jtpt[0] < jtptmin) continue;
 
     nEvents_hasJets++;
+    if (debug) {
+      log(LOG_TRACE, "Event " + std::to_string(i) + ": passed leading-jet preselection");
+    }
 
     eh->event_vz->Fill(vz, evtwt);
-    if (isMC)
-      eh->event_pthatwsgenweight->Fill(pthat, weight);
 
     // Z+jet variables
     double Z_pt = selectedZ.pt;
@@ -1062,10 +1129,8 @@ void analyse_ZJet(string input = "ZJETHP",
 
     // JET ID - this is 2023 AK4CHS jet selection 12/2024
     // fill passjteta for all jets in the event?
-    bool passjetid[nref];
+    std::vector<bool> passjetid(nref, false);
     for (int j = 0; j < nref; ++j) {
-      passjetid[j] = false; // Default to fail
-      
       if (checkjetid) {
         float eta = fabs(jteta[j]);
         
@@ -1110,22 +1175,23 @@ void analyse_ZJet(string input = "ZJETHP",
     }
 
     // Apply JEC
+    if (debug) {
+      log(LOG_TRACE, "Event " + std::to_string(i) + ": entering JEC loop");
+    }
     for (int j = 0; j < nref; ++j) {
       jtpt_uncorr[j] = jtpt[j];
 
 #if REDOJES == 1
       // cout << "Applying JES" << endl;
-      corr->setJetPt(jtpt[j]);
-      // corr->setJetE(jteu[jetidx]);
-      corr->setJetEta(jteta[j]);
-      //     corr->setJetPhi(jthpi[j]);
-      vector<float> v = corr->getSubCorrections();
-      float jes = v.back();
-      //     cout << "New jes correction jet pt: " << jtpt[j] << " " <<
-      //jteta[j] << " "  << jes << endl;
-      jtpt[j] *= jes;
+  JEC.SetJetPT(jtpt[j]);
+  JEC.SetJetEta(jteta[j]);
+  JEC.SetJetPhi(jtphi[j]);
+  jtpt[j] = JEC.GetCorrectedPT();
 #endif
       // JER not applied for photon+jet L3 residual analysis
+    }
+    if (debug) {
+      log(LOG_TRACE, "Event " + std::to_string(i) + ": finished JEC loop");
     }
 
     // ========================================
@@ -1134,12 +1200,14 @@ void analyse_ZJet(string input = "ZJETHP",
 
     // Find leading and subleading away-side jets
     // identify all jets back-to-back with Z boson (dphi > 2.7)// No just apply a small dR requirement
-    int awayJetIndices[MAXJETS];
-    int nAwayJets = 0;
+    std::vector<int> awayJetIndices;
+    awayJetIndices.reserve(nref);
+    const float probeJetPtMin = jtptmin; // Minimum pT for the leading away-side jet (probe jet)
+    const float alphaJetPtFloor = std::min(probeJetPtMin, jtptlimitforalpha);
 
     for (int j = 0; j < nref; j++) {
       if (checkjetid && passjetid[j] == 0) continue; // Apply jet ID
-      if (jtpt[j] < 40.0) continue; // Jet kinematic cuts, Minimum pT
+      if (jtpt[j] < alphaJetPtFloor) continue;
 
       // Calculate delta-phi with Z
       float dphi = abs(jtphi[j] - Z_phi);
@@ -1147,7 +1215,7 @@ void analyse_ZJet(string input = "ZJETHP",
         dphi = 2 * TMath::Pi() - dphi;
 
       // Back-to-back requirement
-      if (dphi < 7*TMath::Pi()/8) continue;
+      if (dphi < 2.7) continue;
 
       // Check overlap with BOTH Z decay leptons
       float deta1 = jteta[j] - selectedZ.lepton1_eta;
@@ -1163,11 +1231,20 @@ void analyse_ZJet(string input = "ZJETHP",
       if (dR1 < leptonJetDeltaR || dR2 < leptonJetDeltaR) continue;  // Reject if overlaps with either lepton
 
       // This jet is away-side
-      awayJetIndices[nAwayJets] = j;
-      nAwayJets++;
+      awayJetIndices.push_back(j);
+    }
+
+    const int nAwayJets = awayJetIndices.size();
+    if (debug) {
+      log(LOG_DEBUG, "Event " + std::to_string(i) + ": away-side jet candidates=" +
+                         std::to_string(nAwayJets));
     }
 
     if (nAwayJets < 1) continue; // Need at least one away-side jet
+
+    // The leading away-side jet is still required to satisfy the nominal
+    // probe-jet threshold.
+    if (jtpt[awayJetIndices[0]] < probeJetPtMin) continue;
 
     nEvents_hasAwayJet++;
 
@@ -1206,8 +1283,10 @@ void analyse_ZJet(string input = "ZJETHP",
     alpha = 0;
     if (nAwayJets >= 2) {
       int secondAwayJetIdx = awayJetIndices[1];
-      float ptavg_temp = Z_pt;
-      alpha = jtpt[secondAwayJetIdx] / ptavg_temp;
+      if (jtpt[secondAwayJetIdx] >= jtptlimitforalpha) {
+        float ptavg_temp = Z_pt;
+        alpha = jtpt[secondAwayJetIdx] / ptavg_temp;
+      }
     } else {
       alpha = 0; // Only one away-side jet
     }
@@ -1248,6 +1327,9 @@ void analyse_ZJet(string input = "ZJETHP",
     nEventsPassedSelection++;
     if (isMC && hasGenZ) {
       nEventsPassedWithGenZ++;
+    }
+    if (debug) {
+      log(LOG_DEBUG, "Event " + std::to_string(i) + ": passed final selection, filling histograms");
     }
     // cout << "TP:" << tagpt << " " << probept << " " << alpha << endl;
     // ========================================
@@ -1433,58 +1515,64 @@ void analyse_ZJet(string input = "ZJETHP",
     }
   } // end of event loop
 
-    // Print summary
-  cout << "\n========================================" << endl;
-  cout << "Z+Jet Analysis Summary" << endl;
-  cout << "========================================" << endl;
-  cout << "Total events processed: " << (i_processed < nentries ? i_processed : nentries) << endl;
-  cout << endl;
-  
-  cout << "--- Z Reconstruction ---" << endl;
-  if (channel == "muon" || channel == "both") {
-    cout << "Events with muon Z: " << nEventsWithMuonZ 
-         << " (" << 100.0*nEventsWithMuonZ/nentries << "%)" << endl;
+  log(LOG_INFO, "========================================");
+  log(LOG_INFO, "Z+Jet Analysis Summary");
+  log(LOG_INFO, "========================================");
+  log(LOG_INFO, "Total events processed: " +
+                    std::to_string((i_processed < nentries) ? i_processed : nentries));
+
+  log(LOG_INFO, "--- Z Reconstruction ---");
+  if (useMuonFlavor) {
+    log(LOG_INFO, "Events with muon Z: " + std::to_string(nEventsWithMuonZ) +
+                      " (" + formatPercent(nEventsWithMuonZ, nentries) + ")");
   }
-  if (channel == "electron" || channel == "both") {
-    cout << "Events with electron Z: " << nEventsWithElectronZ 
-         << " (" << 100.0*nEventsWithElectronZ/nentries << "%)" << endl;
+  if (useElectronFlavor) {
+    log(LOG_INFO, "Events with electron Z: " +
+                      std::to_string(nEventsWithElectronZ) + " (" +
+                      formatPercent(nEventsWithElectronZ, nentries) + ")");
   }
   
   if (isMC) {
-    cout << "Events with gen-level Z: " << nEventsWithGenZ 
-         << " (" << 100.0*nEventsWithGenZ/nentries << "%)" << endl;
+    log(LOG_INFO, "Events with gen-level Z: " +
+                      std::to_string(nEventsWithGenZ) + " (" +
+                      formatPercent(nEventsWithGenZ, nentries) + ")");
   }
-  cout << endl;
   
-  cout << "--- Selection Flow ---" << endl;
-  Long64_t nWithZ = (channel == "muon") ? nEventsWithMuonZ : 
-                    (channel == "electron") ? nEventsWithElectronZ :
+  log(LOG_INFO, "--- Selection Flow ---");
+  Long64_t nWithZ = (analysisType == AnalysisType::ZJET_MUMU) ? nEventsWithMuonZ : 
+                    (analysisType == AnalysisType::ZJET_EE) ? nEventsWithElectronZ :
                     (nEventsWithMuonZ + nEventsWithElectronZ);
   
-  cout << "Events with Z:              " << nWithZ << " (100%)" << endl;
-  cout << "  + has jets:               " << nEvents_hasJets 
-       << " (" << 100.0*nEvents_hasJets/nWithZ << "%)" << endl;
-  cout << "  + Z_pT > 60 GeV:          " << nEvents_ZptCut 
-       << " (" << 100.0*nEvents_ZptCut/nWithZ << "%)" << endl;
-  cout << "  + has away-side jet:      " << nEvents_hasAwayJet 
-       << " (" << 100.0*nEvents_hasAwayJet/nWithZ << "%)" << endl;
-  cout << "  + passes veto map:        " << nEventsPassedSelection 
-       << " (" << 100.0*nEventsPassedSelection/nWithZ << "%)" << endl;
-  cout << endl;
+  log(LOG_INFO, "Events with Z:              " + std::to_string(nWithZ) +
+                    " (" + (nWithZ > 0 ? std::string("100%") : std::string("n/a")) + ")");
+  log(LOG_INFO, "  + has jets:               " + std::to_string(nEvents_hasJets) +
+                    " (" + formatPercent(nEvents_hasJets, nWithZ) + ")");
+  log(LOG_INFO, "  + Z_pT > 60 GeV:          " + std::to_string(nEvents_ZptCut) +
+                    " (" + formatPercent(nEvents_ZptCut, nWithZ) + ")");
+  log(LOG_INFO, "  + has away-side jet:      " +
+                    std::to_string(nEvents_hasAwayJet) + " (" +
+                    formatPercent(nEvents_hasAwayJet, nWithZ) + ")");
+  log(LOG_INFO, "  + passes veto map:        " +
+                    std::to_string(nEventsPassedSelection) + " (" +
+                    formatPercent(nEventsPassedSelection, nWithZ) + ")");
   
   if (isMC) {
-    cout << "--- Gen-Matching (MC only) ---" << endl;
-    cout << "Events passed with gen-Z: " << nEventsPassedWithGenZ << endl;
+    log(LOG_INFO, "--- Gen-Matching (MC only) ---");
+    log(LOG_INFO, "Events passed with gen-Z: " +
+                      std::to_string(nEventsPassedWithGenZ));
     if (nEventsPassedSelection > 0) {
       float genMatchEff = 100.0 * nEventsPassedWithGenZ / nEventsPassedSelection;
-      cout << "Gen-matching efficiency: " << genMatchEff << "%" << endl;
+      std::ostringstream genMatchLine;
+      genMatchLine << std::fixed << std::setprecision(2)
+                   << "Gen-matching efficiency: " << genMatchEff << "%";
+      log(LOG_INFO, genMatchLine.str());
     }
-    cout << endl;
   }
   
-  cout << "========================================" << endl;
-  cout << "FINAL: " << nEventsPassedSelection << " events passed all selections" << endl;
-  cout << "========================================\n" << endl;
+  log(LOG_INFO, "========================================");
+  log(LOG_INFO, "FINAL: " + std::to_string(nEventsPassedSelection) +
+                    " events passed all selections");
+  log(LOG_INFO, "========================================");
 
   // Write output histograms
   for (auto &histrange : _histos) {
@@ -1496,7 +1584,13 @@ void analyse_ZJet(string input = "ZJETHP",
 
   // Write and close output file
   outfile->Write();
-  cout << "Wrote " << outputfilename.c_str() << endl;
+  log(LOG_INFO, "Wrote " + outputfilename);
+
+  if (mapfile) {
+    mapfile->Close();
+    delete mapfile;
+    mapfile = nullptr;
+  }
 
   // Close file properly - TFile destructor handles all owned histogram cleanup
   outfile->Close();
