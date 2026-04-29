@@ -65,6 +65,7 @@ Main entry points:
 
 - `fillhistograms/analyse.cc` for dijet L2 residual and JER inputs
 - `fillhistograms/analyse_PhotonJet.cc` for photon+jet L3 inputs
+- `fillhistograms/analyse_ZJet.cc` for Z+jet L3 inputs
 - `batch/submit_condor.py` and `batch/merge_outputs.sh` for Condor production
 
 The local fillers support the same basic input modes used throughout the repository: `era`, `file`, `directory`, and `filelist`.
@@ -119,6 +120,9 @@ Active split workflow:
 Minimal chain:
 
 1. Fill photon+jet histograms with `fillhistograms/analyse_PhotonJet.cc`.
+	For Z+jet histogram production, use `fillhistograms/analyse_ZJet.cc` with
+	`AnalysisType::ZJET_MUMU`, `AnalysisType::ZJET_EE`, or `AnalysisType::ZJET`
+	for dimuon, dielectron, or combined selection.
 2. Derive the response-ratio inputs with `L3Residual/deriveL3_from_photonjet.C`.
 3. Run the shared pTref fit with `L3Residual/L3Res.C`.
 4. Export standalone L3 and combined L2L3 text payloads with `L3Residual/createL2L3ResTextFile.C`.

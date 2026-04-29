@@ -9,6 +9,12 @@ This page documents the active photon+jet L3 residual workflow. The split fit/ex
 
 [L3Residual/dofits_L3.C](../L3Residual/dofits_L3.C) is now an optional thin wrapper for the split chain above; the active implementation lives in the split macros themselves.
 
+The repository also contains a Z+jet histogram filler and a shared enum-based
+derivation helper for mixed photon/Z workflows:
+
+- [fillhistograms/analyse_ZJet.cc](../fillhistograms/analyse_ZJet.cc)
+- [L3Residual/deriveL3.C](../L3Residual/deriveL3.C)
+
 ## At a glance
 
 | Stage | Macro | Required inputs | Main outputs |
@@ -19,6 +25,33 @@ This page documents the active photon+jet L3 residual workflow. The split fit/ex
 | Text export | [createL2L3ResTextFile.C](../L3Residual/createL2L3ResTextFile.C) | fit ROOT file from `L3Res.C`, L2Residual text payload | local L3 text file, exported L3 text file, combined L2L3 text file, shared full pTref export plot |
 
 ## Macro signatures
+
+### `analyse_ZJet.cc`
+
+```cpp
+void analyse_ZJet(string input = "ZJETHP",
+                  string outputfiletag = "AK4_zjet",
+                  bool isMC = false,
+                  bool checkjetid = false,
+                  string inputType = "era",
+                  int maxFiles = -1,
+                  int maxEvents = -1,
+                  string outputDir = "",
+                  int batchIndex = -1,
+                  int totalBatches = 1,
+                  string jetPath = "ak4PFJetAnalyzer/t",
+                  AnalysisType analysisType = AnalysisType::ZJET_MUMU,
+                  float jtptlimitforalpha = 15)
+```
+
+Flavor selection is now encoded in `AnalysisType`:
+
+- `AnalysisType::ZJET_MUMU`: dimuon Z+jet
+- `AnalysisType::ZJET_EE`: dielectron Z+jet
+- `AnalysisType::ZJET`: combined ee+mumu Z+jet
+
+The macro now uses the shared `log()` helper for normal status, warning, and
+summary output.
 
 ### `deriveL3_from_photonjet.C`
 
@@ -43,6 +76,27 @@ Important notes:
 - The macro requires the direct JetPt balance profiles already stored by the filler. It does not fall back to a photon-pT-derived approximation.
 - `refAlphaBin` is the cumulative alpha bin used for the eta maps and for the normalized alpha series.
 - Weighted photon+jet profiles must keep the ROOT-stored `TProfile3D` bin errors when collapsing over eta or pT. The macro does not approximate uncertainties with `1/sqrt(entries)`.
+
+### `deriveL3.C`
+
+```cpp
+void deriveL3_from_photonjet(TString mcFile,
+                             TString dataFile,
+                             TString outfilename = "L3Residual.root",
+                             int refAlphaBin = 5,
+                             bool useabs = true,
+                             bool usewideabs = false,
+                             AnalysisType analysisType = AnalysisType::ZJET)
+```
+
+This shared derivation helper now selects photon+jet vs Z+jet through
+`AnalysisType` instead of a string mode. It accepts `AnalysisType::PHOTONJET`
+or any of the Z+jet enum values.
+
+Unlike the older strict behavior, direct JetPt balance profiles in this helper
+are optional diagnostic inputs. The main pTref derivation continues even when
+those JetPt profiles are missing, and the JetPt diagnostic outputs are skipped
+in that case.
 
 ### `L3Res.C`
 
