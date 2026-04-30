@@ -178,13 +178,13 @@ void normalizeHistogramByReferenceBin(TH1D *hist, int referenceBin) {
 
 } // namespace
 
-void deriveL3_from_photonjet(
-    TString mcFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONMC_AK4_photonjet.root",
-    TString dataFile = "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/PHOTONHP_AK4_photonjet.root",
-    TString outfilename = "L3Residual.root",
+void deriveL3(
+    TString mcFile = "/eos/home-z/zzaidanc/L3ResZJetpp24/Outputs/jtpt40_Z40/2026_04_29_ZJet_MC_ak4_jtpt40_Z40.root",
+    TString dataFile = "/eos/home-z/zzaidanc/L3ResZJetpp24/Outputs/jtpt40_Z40/2026_04_29_ZJet_Data_ak4_jtpt40_Z40.root",
+    TString outfilename = "L3Residual_ZJet_jtpt30_Z40.root",
     int refAlphaBin = 5,
-    bool useabs = true,
-    bool usewideabs = false,
+    bool useabs = false,
+    bool usewideabs = true,
     AnalysisType analysisType = AnalysisType::ZJET) {
 
   if (analysisType != AnalysisType::PHOTONJET &&

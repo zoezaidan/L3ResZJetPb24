@@ -12,7 +12,7 @@
 
 #include "L3Res.C"
 #include "createL2L3ResTextFile.C"
-#include "deriveL3_from_photonjet.C"
+#include "deriveL3.C"
 #include "plotresponse_L3.C"
 
 #include "TString.h"
@@ -24,12 +24,11 @@
 using namespace std;
 
 void runL3RES(
+
     TString mcInputFile =
-        "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/"
-        "2026_04_13_QCDPhoton_full.root",
+        "/eos/home-z/zzaidanc/L3ResZJetpp24/Outputs/jtpt40_Z40/2026_04_29_ZJet_MC_ak4_jtpt40_Z40.root",
     TString dataInputFile =
-        "/eos/cms/store/group/phys_heavyions/bharikri/JetMinPOG/L3ResPhotonJet/"
-        "2026_04_13_2024ppRefHP_full.root",
+        "/eos/home-z/zzaidanc/L3ResZJetpp24/Outputs/jtpt40_Z40/2026_04_29_ZJet_Data_ak4_jtpt40_Z40.root",
     string l2ResidualFile =
         "fillhistograms/jecfiles/Prompt24HIpp_V1_DATA_L2Residual_AK4PF.txt",
     bool makeInputPlots = true, int refAlphaBin = 5, double fitAlphaMin = 0.0,
@@ -41,7 +40,7 @@ void runL3RES(
   TString currentDir = gSystem->pwd();
   const string currentDirStr = string(currentDir.Data());
 
-  const string outTag = "L3_derived_2026_04_22_photonjet_final";
+  const string outTag = "L3_derived_2026_04_30_photonjet_final";
   const string outBaseDir = currentDirStr + "/L3Residual";
   const string outDir = outBaseDir + "/" + outTag;
   const string plotsDir = outDir + "/plots";
@@ -71,7 +70,7 @@ void runL3RES(
   }
 
   cout << "[2/3] Deriving L3 response inputs" << endl;
-  deriveL3_from_photonjet(mcInputFile, dataInputFile, derivedFile, refAlphaBin,
+  deriveL3(mcInputFile, dataInputFile, derivedFile, refAlphaBin,
                           false, true);
 
   cout << "[3/3] Running L3 fits and text export" << endl;

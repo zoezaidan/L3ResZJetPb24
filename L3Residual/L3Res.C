@@ -193,9 +193,9 @@ static SequentialFitResult runSequentialTemplateFit(TGraphErrors *graph,
   return result;
 }
 
-void L3Res(TString inFileL3Derived = "L3_derived.root",
-           TString sampleTypesCSV = "", TString inputPtRangesCSV = "",
-           string outfilename = "L3Res_photonjet",
+void L3Res(TString inFileL3Derived = "L3Residual/L3Residual_ZJet_jtpt30_Z40.root",
+           TString sampleTypesCSV = "Zjet", TString inputPtRangesCSV = "",
+           string outfilename = "L3Res_Z40jet30",
            string runLabel = "2024ppRef", string lumiLabel = "pp 480.4 pb^{-1}",
            int refAlphaBin = 5, double fitAlphaMin = 0.0,
            double fitAlphaMax = 0.4, string outBaseDir = "L3Residual") {
